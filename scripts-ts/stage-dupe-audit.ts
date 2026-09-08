@@ -42,7 +42,34 @@ async function main(){
   for(const v of Array.from(byCompany.values())) hist[v.length]=(hist[v.length]??0)+1;
   console.log('records per company:');
   for(const [k,v] of Object.entries(hist).sort((a,b)=>Number(a[0])-Number(b[0]))) console.log(`   ${String(v).padStart(4)} company(ies) with ${k} record(s)`);
-  console.log('\nworst offenders:');
+  // ── SAME-DAY duplicates are the bug; different-day records are DESIGNED history ────────────────
+  // writeStageRecord.ts appends a record per scoring EVENT on purpose, so several records for one
+  // company is normal. What is not normal is two records for one company on ONE day: the scorer holds
+  // `todayRecordId` precisely so a same-day re-score OVERWRITES instead of appending.
+  let sameDayGroups=0, redundant=0;
+  const offenders:Array<{cid:string;name:string;day:string;ids:string[]}>=[];
+  for(const [cid,v] of Array.from(byCompany.entries())){
+    const byDay=new Map<string,any[]>();
+    for(const r of v){
+      const d=String((r.properties??{}).rescore_date ?? '').slice(0,10) || String(r.createdAt??'').slice(0,10);
+      const a=byDay.get(d)??[]; a.push(r); byDay.set(d,a);
+    }
+    for(const [day,rs] of Array.from(byDay.entries())){
+      if(rs.length<2) continue;
+      sameDayGroups++; redundant += rs.length-1;
+      offenders.push({cid,name:String((rs[0].properties??{}).name??'').split('—')[0].trim(),day,ids:rs.map((r:any)=>r.id)});
+    }
+  }
+  console.log(`\n── SAME-DAY DUPLICATES (the bug) ──`);
+  console.log(`   company+day pairs holding more than one record: ${sameDayGroups}`);
+  console.log(`   redundant records (keep newest per pair, delete the rest): ${redundant} of ${recs.length}`);
+  for(const o of offenders.sort((a,b)=>b.ids.length-a.ids.length).slice(0,25)){
+    console.log(`   ${o.day}  ${o.name.slice(0,34).padEnd(34)} ${o.ids.length} records  ${o.ids.map((i)=>i.slice(0,8)).join(' ')}`);
+  }
+  const legitimate = Array.from(byCompany.values()).filter((v)=>v.length>1).length - new Set(offenders.map((o)=>o.cid)).size;
+  console.log(`\n   companies whose multiple records are all on DIFFERENT days (designed history, leave alone): ${legitimate}`);
+
+  console.log('\nworst offenders (all records per company, incl. legitimate history):');
   for(const [cid,v] of multi.sort((a,b)=>b[1].length-a[1].length).slice(0,8)){
     console.log(`   company ${cid}: ${v.length} records`);
     for(const r of v.slice(0,6)){

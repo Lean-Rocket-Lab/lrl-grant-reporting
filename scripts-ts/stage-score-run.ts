@@ -76,6 +76,7 @@ function agree(prior: number | null | undefined, next: number | null | undefined
   const { labelResolvingAccessor, buildInputBlob, PATH_DIMENSIONS } = await import('../lib/stage/companyInputs');
   const { getCompanyStageContext, getStageAssociationId, STAGE_OBJECT } = await import('../lib/stage/priorAssessment');
   const { createStageRecord, updateStageRecord } = await import('../lib/stage/writeStageRecord');
+  const { claimStageDay, publishStageDay, abandonStageDay } = await import('../lib/stage/stageDayClaim');
   const { propagateCurrentScoring } = await import('../lib/stage/propagateScoring');
   const { STAGE_SCORER_NAME } = await import('../lib/stage/trigger');
   const { fingerprint, getEnricherState, setEnricherState } = await import('../lib/enrichment/stateStore');
@@ -192,12 +193,24 @@ function agree(prior: number | null | undefined, next: number | null | undefined
       let recordId = ctx.todayRecordId ?? '';
       if (apply) {
         const propsInput = { score, name, rescoreDate: today };
-        const action: 'create' | 'update' = ctx.todayRecordId ? 'update' : 'create';
-        if (ctx.todayRecordId) {
-          await updateStageRecord(ctx.todayRecordId, propsInput, { catalog: stageCatalog, client });
+        // Same (company, day) claim the webhook path takes. This runner is sequential per company so
+        // it never raced ITSELF — but it runs with --concurrency, and more importantly a webhook
+        // delivery can land mid-run for a company this loop is already scoring. One claim covers both.
+        const claim = await claimStageDay(co.id, today, ctx.todayRecordId);
+        const action: 'create' | 'update' = claim.action === 'update' ? 'update' : 'create';
+        if (claim.action === 'update' && claim.recordId) {
+          await updateStageRecord(claim.recordId, propsInput, { catalog: stageCatalog, client });
+          recordId = claim.recordId;
           stats.updated++;
         } else {
-          const res = await createStageRecord(propsInput, { catalog: stageCatalog, assocId: assocId!, companyId: co.id, client });
+          let res: { recordId: string };
+          try {
+            res = await createStageRecord(propsInput, { catalog: stageCatalog, assocId: assocId!, companyId: co.id, client });
+          } catch (e) {
+            await abandonStageDay(co.id, today).catch(() => {});
+            throw e;
+          }
+          await publishStageDay(co.id, today, res.recordId).catch(() => {});
           recordId = res.recordId;
           stats.created++;
         }

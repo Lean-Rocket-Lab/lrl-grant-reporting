@@ -33,15 +33,25 @@ function extract(req: NextApiRequest): { contactId?: string; formId?: string; vi
 
 function authorized(req: NextApiRequest): boolean {
   const expected = process.env.WIX_SYNC_WEBHOOK_SECRET;
-  if (!expected) return true;
+  if (!expected) {
+    // Fail CLOSED in production. An unset secret used to mean "open", which is a fine dev
+    // convenience and a hole on a public deployment: one missing Vercel env var silently turns a
+    // live webhook receiver into an anonymous write endpoint. Dev keeps the convenience.
+    return process.env.NODE_ENV !== 'production';
+  }
   const got = req.headers['x-webhook-secret'] ?? req.query.secret;
   return typeof got === 'string' && got === expected;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.query.echo === '1') return res.status(200).json({ echo: true, query: req.query, body: req.body });
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!authorized(req)) return res.status(401).json({ error: 'Unauthorized' });
+  // NOTE: echo runs AFTER auth, deliberately. It used to run first, which made `?echo=1` an
+  // unauthenticated endpoint on a public deployment (found 2026-09-08 re-probing after the
+  // middleware deploy). It reflects only the caller's own body, so nothing of ours leaked — but a
+  // diagnostic that sits in front of the auth check is one edit away from leaking something real.
+  // Debugging still works: send the same x-webhook-secret the GHL workflow sends.
+  if (req.query.echo === '1') return res.status(200).json({ echo: true, query: req.query, body: req.body });
 
   const { contactId, formId, via } = extract(req);
   if (!contactId) {

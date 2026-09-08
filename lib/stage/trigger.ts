@@ -22,6 +22,7 @@ import { routePath, scoreCompany } from './scoreCompany';
 import { buildInputBlob, labelResolvingAccessor, PATH_DIMENSIONS, SCORING_INPUT_KEYS } from './companyInputs';
 import { getCompanyStageContext, getStageAssociationId, STAGE_OBJECT } from './priorAssessment';
 import { createStageRecord, updateStageRecord } from './writeStageRecord';
+import { claimStageDay, publishStageDay, abandonStageDay } from './stageDayClaim';
 import { propagateCurrentScoring, type PropagateResult } from './propagateScoring';
 import { fingerprint, getEnricherState, setEnricherState } from '../enrichment/stateStore';
 import { logChange } from '../audit/log';
@@ -151,14 +152,31 @@ export async function runStageScoreTrigger(companyId: string, opts: StageTrigger
   };
 
   const propsInput = { score, name, rescoreDate: today };
-  if (ctx.todayRecordId) {
-    await updateStageRecord(ctx.todayRecordId, propsInput, { catalog: await getCatalog(STAGE_OBJECT, { client }), client });
+
+  // ── ONE RECORD PER COMPANY PER DAY, enforced in Postgres ─────────────────────────────────────────
+  // `ctx.todayRecordId` comes from the GHL records SEARCH, which lags a create by ~12s. This webhook
+  // fires on every company/contact change, so a burst of edits to one company delivered several
+  // scoring events inside that window and each one read `null` and created — 8 company+day pairs
+  // ended up with duplicates between 08-11 and 08-27. The claim closes the window; see stageDayClaim.
+  const claim = await claimStageDay(companyId, today, ctx.todayRecordId);
+  if (claim.action === 'update' && claim.recordId) {
+    await updateStageRecord(claim.recordId, propsInput, { catalog: await getCatalog(STAGE_OBJECT, { client }), client });
     await setEnricherState(companyId, { scoreInputHash: inputHash });
-    await logScore(ctx.todayRecordId, 'update');
-    const propagated = await propagate(ctx.todayRecordId);
-    return { ran: true, path, action: 'updated', recordId: ctx.todayRecordId, scores, propagated };
+    await logScore(claim.recordId, 'update');
+    const propagated = await propagate(claim.recordId);
+    return { ran: true, path, action: 'updated', recordId: claim.recordId, scores, propagated };
   }
-  const res = await createStageRecord(propsInput, { catalog: await getCatalog(STAGE_OBJECT, { client }), assocId: assocId!, companyId, client });
+  if (!assocId) return { ran: false, reason: 'company_business_stage association not found' };
+  let res: { recordId: string };
+  try {
+    res = await createStageRecord(propsInput, { catalog: await getCatalog(STAGE_OBJECT, { client }), assocId, companyId, client });
+  } catch (e) {
+    // Hand the claim back, or this company's day stays claimed by a create that never happened and
+    // every later delivery waits out the window before taking it over anyway.
+    await abandonStageDay(companyId, today).catch(() => {});
+    throw e;
+  }
+  await publishStageDay(companyId, today, res.recordId).catch(() => {});
   await setEnricherState(companyId, { scoreInputHash: inputHash });
   await logScore(res.recordId, 'create');
   const propagated = await propagate(res.recordId);
