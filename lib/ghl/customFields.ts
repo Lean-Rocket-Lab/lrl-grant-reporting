@@ -209,7 +209,14 @@ export async function deleteLocationField(fieldId: string, client: GhlClient = g
  *  the catalog back and use the key GHL actually assigned rather than the one you expected. Returns
  *  the created field as GHL reports it. */
 export async function createLocationField(
-  input: { model: 'contact' | 'opportunity'; name: string; dataType: string; placeholder?: string },
+  input: {
+    model: 'contact' | 'opportunity';
+    name: string;
+    dataType: string;
+    placeholder?: string;
+    /** Option LABELS for SINGLE_OPTIONS / MULTIPLE_OPTIONS / RADIO / CHECKBOX. */
+    options?: string[];
+  },
   client: GhlClient = ghl(),
 ): Promise<CustomFieldDef | null> {
   const data = await client.request<any>({
@@ -220,6 +227,7 @@ export async function createLocationField(
       name: input.name,
       dataType: input.dataType,
       model: input.model,
+      ...(input.options?.length ? { options: input.options } : {}),
       ...(input.placeholder ? { placeholder: input.placeholder } : {}),
     },
   });

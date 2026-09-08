@@ -34,12 +34,19 @@ const SELF_ENFORCING = [
   '/api/opportunity-sync',
   '/api/resource-sync',
   '/api/readiness-tag',
-  // Client-facing: verifies a signed client token (lib/security/clientToken.ts).
-  '/api/client-profile',
 ];
 
-/** Public surface: the client rescore page and the staff login itself. */
-const PUBLIC_PREFIXES = ['/client-reporting', '/staff-login', '/api/staff/login'];
+/**
+ * Public surface: the staff login, and nothing else.
+ *
+ * There was briefly a client-facing rescore page here (`/client-reporting/*` +
+ * `/api/client-profile`, signed-token gated). Zach scrapped it 2026-09-08 in favour of a GHL-hosted
+ * scoring form, on the correct reasoning that GoHighLevel is already internet-facing and is the
+ * vendor's problem, while this app holds every credential LRL owns. **The app now has ZERO public
+ * routes besides the login.** Keep it that way: anything client-facing belongs in GHL, and reaches
+ * this app only through a webhook receiver with a secret.
+ */
+const PUBLIC_PREFIXES = ['/staff-login', '/api/staff/login'];
 
 const isApi = (p: string) => p.startsWith('/api/');
 

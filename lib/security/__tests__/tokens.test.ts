@@ -1,9 +1,12 @@
-// Pins the behaviour the whole client-facing surface rests on. A regression here is not a broken
-// test, it is a public company profile.
+// Pins the signing primitives every credential-bearing artifact in this app depends on.
+//
+// Originally written for the client rescore links (scrapped 2026-09-08 in favour of a GHL-hosted
+// form). It stays because `lib/security/hmac.ts` still signs the STAFF SESSION COOKIE, which is now
+// the only thing standing between the internet and every credential LRL owns. A regression here is
+// not a broken test, it is an open front door.
 
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { makeSigned, verifySigned, timingSafeEqual, b64uEncode, b64uDecodeToString } from '../hmac';
-import { mintClientToken, verifyClientToken } from '../clientToken';
 
 const SECRET = 'test-secret-do-not-use';
 
@@ -45,32 +48,5 @@ describe('hmac', () => {
     expect(timingSafeEqual('abc', 'abc')).toBe(true);
     expect(timingSafeEqual('abc', 'abd')).toBe(false);
     expect(timingSafeEqual('abc', 'ab')).toBe(false);
-  });
-});
-
-describe('client token', () => {
-  beforeEach(() => { process.env.CLIENT_LINK_SECRET = SECRET; });
-
-  it('carries the contact and company through', async () => {
-    const t = await mintClientToken('contact_1', 'biz_1');
-    expect(await verifyClientToken(t)).toMatchObject({ c: 'contact_1', b: 'biz_1' });
-  });
-
-  it('cannot be re-pointed at another company', async () => {
-    const t = await mintClientToken('contact_1', 'biz_1');
-    const [, sig] = t.split('.');
-    const swapped = b64uEncode(JSON.stringify({ c: 'contact_1', b: 'biz_VICTIM', exp: 9999999999 }));
-    expect(await verifyClientToken(`${swapped}.${sig}`)).toBeNull();
-  });
-
-  it('refuses everything when the secret is unset', async () => {
-    const t = await mintClientToken('contact_1', 'biz_1');
-    delete process.env.CLIENT_LINK_SECRET;
-    expect(await verifyClientToken(t)).toBeNull();
-  });
-
-  it('honours the ttl', async () => {
-    const expired = await mintClientToken('c', 'b', -1);
-    expect(await verifyClientToken(expired)).toBeNull();
   });
 });
