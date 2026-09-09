@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { syncConnection } from '../apply';
 import type { DryRunConnection } from '../dryrun';
 import type { CustomFieldCatalog, CustomFieldDef } from '../../ghl/types';
 import type { RecordFields } from '../../ghl/records';
