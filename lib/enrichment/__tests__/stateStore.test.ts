@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fingerprint, normalizeCompanyAddress, addressNeedsGeocode } from '../stateStore';
+import { fingerprint, normalizeCompanyAddress, addressNeedsGeocode, isGeocodableAddress } from '../stateStore';
 
 describe('fingerprint', () => {
   it('is stable for the same input and differs when the input changes', () => {
@@ -35,7 +35,6 @@ describe('addressNeedsGeocode', () => {
 // blank. 24 companies were in that state. county gates SBSH eligibility, so a silent blank is a
 // wrong answer, not a missing one.
 
-import { normalizeCompanyAddress, isGeocodableAddress, addressNeedsGeocode } from '../stateStore';
 
 /** A field reader over business.* keys, as the caller supplies. */
 const reader = (o: Record<string, unknown>) => (k: string) => o[k.replace(/^business\./, '')];
