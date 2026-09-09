@@ -73,7 +73,21 @@ export async function applyContactChange(
   let down: ApplyResult | null = null;
   if (companyChanged && companyId) {
     const co2c = await loadPushConnection(COMPANY_TO_CONTACTS_SLUG);
-    if (co2c) down = await syncConnection(co2c, companyId, { apply: opts.apply }, undefined, client);
+    // ⚠️ EXCLUDE THE CONTACT THAT TRIGGERED US. It just pushed its values up, so it already holds
+    // them; writing them back changes the very record whose change fired this webhook, and GHL
+    // enrolls it again. Measured on Aiden Brunin's intake 2026-09-09: GHL delivered ~4
+    // contact-changed events for one form submission and this fan-out turned them into **7
+    // workflow enrollments** — the app roughly doubling whatever GHL sent, on a workflow GHL had
+    // already once suspended for a write storm.
+    //
+    // The loop DID terminate (the equality guard means round two finds nothing to write), so this
+    // was never infinite — but "converges after seven enrollments" is not good enough on a
+    // mechanism that can get the workflow locked.
+    //
+    // Siblings are still fanned to, which is what the fan-out is for. Anything the trigger contact
+    // genuinely needs back from the company — an enricher's or the scorer's output, both of which
+    // run AFTER this point — arrives on the next company-changed event or the nightly reconcile.
+    if (co2c) down = await syncConnection(co2c, companyId, { apply: opts.apply, skipTargetIds: new Set([contactId]) }, undefined, client);
   }
   return { contactId, companyId, up, down, companyChanged, companyFieldsWritten };
 }

@@ -112,7 +112,7 @@ function identityGate(
 export async function syncConnection(
   connection: DryRunConnection,
   sourceRecordId: string,
-  opts: { apply: boolean },
+  opts: { apply: boolean; skipTargetIds?: ReadonlySet<string> },
   deps?: Partial<ApplyDeps>,
   client?: GhlClient,
 ): Promise<ApplyResult> {
@@ -140,8 +140,14 @@ export async function syncConnection(
   if (!ids.length) return { ...base, counterpartCount: 0, forward: [], reverse: null, note: 'no linked records on the target side' };
 
   // Forward: source → each counterpart.
+  //
+  // `skipTargetIds` exists to break a feedback loop rather than to filter data. When a contact
+  // change is what triggered this run, fanning the company's state back onto THAT contact writes the
+  // record that is about to re-fire the contact-changed webhook — so the caller excludes it. Its
+  // siblings still receive the fan-out, which is the point of the fan-out.
   const forward: ForwardResult[] = [];
   for (const targetId of ids) {
+    if (opts.skipTargetIds?.has(targetId)) continue;
     const target = await readRec(connection.targetObject, targetId, client);
 
     // Refuse the whole counterpart when the contact no longer belongs to this company. Blocking the

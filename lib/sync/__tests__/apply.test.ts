@@ -138,3 +138,45 @@ describe('syncConnection (apply)', () => {
     });
   });
 });
+
+// ── skipTargetIds: breaking the enrollment loop ───────────────────────────────────────────────────
+// Measured on Aiden Brunin's intake 2026-09-09: GHL delivered ~4 contact-changed events for one form
+// submission, and the company→contacts fan-out wrote the TRIGGERING contact each time, re-firing the
+// webhook. 4 inbound became 7 workflow enrollments on a workflow GHL had already suspended once.
+
+import { syncConnection } from '../apply';
+
+describe('syncConnection skipTargetIds', () => {
+  /** Minimal deps: two contacts on one company, nothing actually written. */
+  const deps = (targets: string[]) => ({
+    readRecordFields: async () => new Map<string, unknown>([['name', 'Acme']]) as any,
+    resolveCounterpartIds: async () => targets,
+    getCatalog: async () => ({ byKey: {}, fields: [], folders: [] }) as any,
+    writeRecordFields: async () => ({ written: [], skipped: [] }),
+  });
+  const conn = {
+    name: 'company-to-contacts', sourceObject: 'business', targetObject: 'contact',
+    rows: [{ sourceKey: 'business.name', targetKey: 'contact.companyName', direction: 'up', enabled: true }],
+  } as any;
+
+  it('fans out to every contact when nothing is skipped', async () => {
+    const r = await syncConnection(conn, 'co_1', { apply: false }, deps(['ct_trigger', 'ct_sibling']) as any);
+    expect(r.forward.map((f) => f.targetId).sort()).toEqual(['ct_sibling', 'ct_trigger']);
+  });
+
+  it('omits the triggering contact, so the write that re-fires the webhook never happens', async () => {
+    const r = await syncConnection(conn, 'co_1', { apply: false, skipTargetIds: new Set(['ct_trigger']) }, deps(['ct_trigger', 'ct_sibling']) as any);
+    expect(r.forward.map((f) => f.targetId)).toEqual(['ct_sibling']);
+  });
+
+  it('still reports the full counterpart count — the sibling fan-out is the point', async () => {
+    const r = await syncConnection(conn, 'co_1', { apply: false, skipTargetIds: new Set(['ct_trigger']) }, deps(['ct_trigger', 'ct_sibling']) as any);
+    expect(r.counterpartCount).toBe(2);
+  });
+
+  it('a single-contact company fans out to nobody, which is the loop fully broken', async () => {
+    // The common case: one contact, one company. Every fan-out here was pure feedback.
+    const r = await syncConnection(conn, 'co_1', { apply: false, skipTargetIds: new Set(['ct_trigger']) }, deps(['ct_trigger']) as any);
+    expect(r.forward).toEqual([]);
+  });
+});
