@@ -213,6 +213,29 @@ export async function syncConnection(
       written = w.written; skipped = [...heldSkips, ...guard.suppressed, ...w.skipped];
       await recordLedger(targetId, written.map((k) => ({ fieldKey: k, value: writeVals[k] })));
     }
+    // ── SUPPRESSIONS MUST BE VISIBLE ────────────────────────────────────────────────────────────
+    // The guard declining a write and nothing happening at all used to look identical: the log row
+    // is gated on `guard.keep.length`, so a change set that was ENTIRELY suppressed produced no row,
+    // and a partially suppressed one logged only what survived. Measured 2026-09-09: the company's
+    // mrl_current stayed at 6 while its stage record said 7, because the 6→7 write was suppressed as
+    // a value repeat — correctly — and left no trace anywhere but a console.warn.
+    //
+    // Logged as its own `applied: false` row, mirroring how the identity gate reports a refusal, so
+    // the primary row keeps meaning "what actually landed" and the refusal is still queryable.
+    if (guard.suppressed.length) {
+      await logChange({
+        objectType: connection.targetObject, recordId: targetId, actorKind: 'sync',
+        recordLabel: await resolveRecordLabel(connection.targetObject, targetId, client),
+        actorName: connection.name ?? `${connection.sourceObject}->${connection.targetObject}`,
+        changes: guard.suppressed.map((sp) => {
+          const c = changes.find((x) => x.fieldKey === sp.key);
+          return { field: sp.key, from: c?.from, to: c?.to };
+        }),
+        applied: false,
+        error: `convergence guard suppressed ${guard.suppressed.length} field(s)`,
+        rationale: guard.suppressed.map((sp) => `${sp.key}: ${sp.reason}`).join(' | '),
+      });
+    }
     if (guard.keep.length) {
       await logChange({
         objectType: connection.targetObject, recordId: targetId, actorKind: 'sync',
@@ -255,6 +278,21 @@ export async function syncConnection(
         const w = await write(connection.sourceObject, sourceRecordId, writeVals, sourceCatalog, client, rawKeys);
         written = w.written; skipped = [...heldSkips, ...guard.suppressed, ...w.skipped];
         await recordLedger(sourceRecordId, written.map((k) => ({ fieldKey: k, value: writeVals[k] })));
+      }
+      // Same visibility rule as the forward path — see the comment there.
+      if (guard.suppressed.length) {
+        await logChange({
+          objectType: connection.sourceObject, recordId: sourceRecordId, actorKind: 'sync',
+          recordLabel: labelFromFields(connection.sourceObject, (k) => source.get(k)),
+          actorName: `${connection.name ?? connection.targetObject + '->' + connection.sourceObject} (reverse)`,
+          changes: guard.suppressed.map((sp) => {
+            const c = changes.find((x) => x.fieldKey === sp.key);
+            return { field: sp.key, from: c?.from, to: c?.to };
+          }),
+          applied: false,
+          error: `convergence guard suppressed ${guard.suppressed.length} field(s)`,
+          rationale: guard.suppressed.map((sp) => `${sp.key}: ${sp.reason}`).join(' | '),
+        });
       }
       if (guard.keep.length) {
         await logChange({
