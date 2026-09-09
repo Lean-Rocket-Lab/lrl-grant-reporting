@@ -25,7 +25,7 @@
 // with no database this reports `unavailable` and the caller keeps its old behaviour rather than
 // blocking, because a missed score is worse than a rare duplicate.
 
-import { claimSourceEvent, resolveClaim, releaseClaim } from '../activities/claims';
+import { claimSourceEvent, resolveClaim, releaseClaim, lookupClaim } from '../activities/claims';
 
 /**
  * The claim `source` for stage scoring.
@@ -84,4 +84,25 @@ export async function publishStageDay(companyId: string, day: string, recordId: 
  */
 export async function abandonStageDay(companyId: string, day: string): Promise<void> {
   await releaseClaim(STAGE_CLAIM_SOURCE, stageDayKey(companyId, day));
+}
+
+/**
+ * Today's stage record id for a company, from POSTGRES rather than the GHL search index.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE INDEX LAG DISABLED THE SCORER'S OWN GATE. `getCompanyStageContext`
+ * resolves `todayRecordId` through `POST /objects/.../records/search`, which is ~12 seconds behind a
+ * create. The scorer only consults its input-hash gate when it can SEE a record, so for ~12 seconds
+ * after the first score every further webhook delivery found no record, skipped the gate, and ran a
+ * full re-score.
+ *
+ * Measured on Aiden Brunin's intake, 2026-09-09: **four AI scoring calls in 21 seconds**, MRL
+ * flip-flopping 7 → 6 → 7 → 7 and Churchill 3 → 3 → 2 → 2. The record kept the last result while the
+ * company kept whatever an interleaved propagation wrote, so one score had three different values
+ * across the record, the company and the client's email.
+ *
+ * The claim is written the moment the record is created and is immediately consistent, so it answers
+ * "have we already scored this company today?" with no window.
+ */
+export async function todayStageRecordId(companyId: string, day: string): Promise<string | null> {
+  return lookupClaim(STAGE_CLAIM_SOURCE, stageDayKey(companyId, day));
 }

@@ -22,7 +22,7 @@ import { routePath, scoreCompany } from './scoreCompany';
 import { buildInputBlob, labelResolvingAccessor, PATH_DIMENSIONS, SCORING_INPUT_KEYS } from './companyInputs';
 import { getCompanyStageContext, getStageAssociationId, STAGE_OBJECT } from './priorAssessment';
 import { createStageRecord, updateStageRecord } from './writeStageRecord';
-import { claimStageDay, publishStageDay, abandonStageDay } from './stageDayClaim';
+import { claimStageDay, publishStageDay, abandonStageDay, todayStageRecordId } from './stageDayClaim';
 import { propagateCurrentScoring, type PropagateResult } from './propagateScoring';
 import { fingerprint, getEnricherState, setEnricherState } from '../enrichment/stateStore';
 import { logChange } from '../audit/log';
@@ -109,7 +109,17 @@ export async function runStageScoreTrigger(companyId: string, opts: StageTrigger
   // unchanged re-fire with NO Claude call. State-based, so it's correct even when GHL native sync
   // populated the company (an empty app diff would otherwise have hidden the change).
   const inputHash = fingerprint(blob);
-  const hasRecord = Boolean(ctx.todayRecordId) || ctx.prior?.source === 'record';
+  // ⚠️ `ctx.todayRecordId` comes from the GHL records SEARCH, which is ~12s behind a create, so it
+  // cannot answer "have we scored today?" during exactly the window that matters. Ask Postgres too:
+  // the (company, day) claim is written when the record is created and is immediately consistent.
+  //
+  // Without this the gate was BYPASSED on every delivery inside the lag window. Measured on Aiden
+  // Brunin's intake 2026-09-09: four AI calls in 21 seconds, MRL flip-flopping 7 → 6 → 7 → 7 and
+  // Churchill 3 → 3 → 2 → 2, leaving the record, the company and the client's email each holding a
+  // different score. The claim already prevented duplicate RECORDS; it ran after the AI call, so it
+  // never prevented duplicate SCORING.
+  const claimedToday = await todayStageRecordId(companyId, today);
+  const hasRecord = Boolean(ctx.todayRecordId) || Boolean(claimedToday) || ctx.prior?.source === 'record';
   if (!opts.force && hasRecord) {
     const state = await getEnricherState(companyId);
     if (state?.scoreInputHash === inputHash) return { ran: false, reason: 'inputs unchanged since last score' };

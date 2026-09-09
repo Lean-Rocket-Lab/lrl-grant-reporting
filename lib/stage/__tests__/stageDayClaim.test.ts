@@ -8,10 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const claimSourceEvent = vi.fn();
 const resolveClaim = vi.fn();
 const releaseClaim = vi.fn();
+const lookupClaimMock = vi.fn();
 vi.mock('../../activities/claims', () => ({
   claimSourceEvent: (...a: unknown[]) => claimSourceEvent(...a),
   resolveClaim: (...a: unknown[]) => resolveClaim(...a),
   releaseClaim: (...a: unknown[]) => releaseClaim(...a),
+  lookupClaim: (...a: unknown[]) => lookupClaimMock(...a),
 }));
 
 import { claimStageDay, publishStageDay, abandonStageDay, stageDayKey, STAGE_CLAIM_SOURCE } from '../stageDayClaim';
@@ -81,5 +83,36 @@ describe('publishStageDay / abandonStageDay', () => {
   it('releases the same key, so a failed create retries instead of stalling', async () => {
     await abandonStageDay('co_1', '2026-08-26');
     expect(releaseClaim).toHaveBeenCalledWith(STAGE_CLAIM_SOURCE, 'co_1:2026-08-26');
+  });
+});
+
+// ── the gate-bypass window ────────────────────────────────────────────────────────────────────────
+// The scorer consults its input-hash gate only when it can SEE today's record. That check used the
+// GHL search index alone, which lags a create by ~12s — so every webhook delivery inside that window
+// found no record, skipped the gate, and ran a full AI re-score.
+//
+// Measured on Aiden Brunin's intake 2026-09-09: four scoring calls in 21 seconds, MRL flip-flopping
+// 7 → 6 → 7 → 7, Churchill 3 → 3 → 2 → 2. One score, three different values across the stage record,
+// the company, and the email sent to the client.
+
+import { todayStageRecordId } from '../stageDayClaim';
+
+describe('todayStageRecordId — the immediately-consistent answer', () => {
+  it('returns the claimed record id for the company+day', async () => {
+    lookupClaimMock.mockReset();
+    lookupClaimMock.mockResolvedValue('rec_today');
+    expect(await todayStageRecordId('co_1', '2026-09-09')).toBe('rec_today');
+    expect(lookupClaimMock).toHaveBeenCalledWith(STAGE_CLAIM_SOURCE, 'co_1:2026-09-09');
+  });
+
+  it('returns null when nothing has been claimed, so a first score still runs', async () => {
+    lookupClaimMock.mockReset();
+    lookupClaimMock.mockResolvedValue(null);
+    expect(await todayStageRecordId('co_1', '2026-09-09')).toBeNull();
+  });
+
+  it('asks under the SAME key the claim was written with', async () => {
+    // A key mismatch here would silently reopen the window: the gate would never see the record.
+    expect(stageDayKey('co_1', '2026-09-09T18:00:00Z')).toBe('co_1:2026-09-09');
   });
 });
