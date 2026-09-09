@@ -24,11 +24,40 @@ export function fingerprint(text: string): string {
 }
 
 /** Normalize a company's address fields into a comparable string (empty when no address present). */
+/**
+ * Values GHL stores that LOOK like data and are not. "(No value)" is a real stored string on this
+ * location — 12 of the 24 companies found with permanently-disabled geo enrichment had addresses
+ * reading `(No value), (No value), MI`, which is not an address but is not empty either.
+ */
+const PLACEHOLDER = /^(\(?\s*no\s*value\s*\)?|undefined|null|n\/?a|none|-{1,2})$/i;
+const clean = (v: unknown): string => {
+  const t = String(v ?? '').trim();
+  return !t || PLACEHOLDER.test(t) ? '' : t;
+};
+
 export function normalizeCompanyAddress(get: (key: string) => unknown): string {
   const parts = ['business.address', 'business.city', 'business.state', 'business.postalcode'].map(
-    (k) => String(get(k) ?? '').trim().toLowerCase(),
+    (k) => clean(get(k)).toLowerCase(),
   );
   return parts.some((p) => p) ? parts.join('|') : '';
+}
+
+/**
+ * Is there enough here for the geocoder to resolve a COUNTY?
+ *
+ * ⚠️ WHY THIS IS SEPARATE FROM "has an address". `normalizeCompanyAddress` returns non-empty when ANY
+ * part is set, so a company whose only address data is the state "MI" reads as having an address and
+ * gets a geocode attempt that cannot possibly succeed. Combined with the fix that only stamps the
+ * state on SUCCESS, that would retry forever — trading a permanent failure for a permanent retry.
+ *
+ * A postal code alone resolves. A city with a state resolves. A street with neither does not, and
+ * neither does a bare state.
+ */
+export function isGeocodableAddress(get: (key: string) => unknown): boolean {
+  const zip = clean(get('business.postalcode'));
+  const city = clean(get('business.city'));
+  const state = clean(get('business.state'));
+  return Boolean(zip) || Boolean(city && state);
 }
 
 /** True when county/geo should (re)run: there's an address AND it differs from what we last geocoded. */

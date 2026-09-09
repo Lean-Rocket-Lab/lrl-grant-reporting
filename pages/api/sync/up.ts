@@ -22,7 +22,7 @@ import { applyContactChange } from '@/lib/sync/orchestrate';
 import { enrichCompany, defaultEnrichers } from '@/lib/enrichment';
 import { runStageScoreTrigger } from '@/lib/stage/trigger';
 import { readRecordFields } from '@/lib/ghl/records';
-import { getEnricherState, setEnricherState, normalizeCompanyAddress, addressNeedsGeocode } from '@/lib/enrichment/stateStore';
+import { getEnricherState, setEnricherState, normalizeCompanyAddress, addressNeedsGeocode, isGeocodableAddress } from '@/lib/enrichment/stateStore';
 import { hasDatabase } from '@/lib/db';
 import { hasWix } from '@/lib/wix/config';
 import { runContactTeamPipeline } from '@/lib/wix-sync/pipeline';
@@ -84,7 +84,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const brf = await readRecordFields('business', companyId);
         geocodeAddress = normalizeCompanyAddress(brf.get);
         const state = await getEnricherState(companyId);
-        runGeo = addressNeedsGeocode(geocodeAddress, state?.geocodedAddress);
+        // Two conditions, and both matter. `addressNeedsGeocode` asks "has it changed since we last
+        // geocoded"; `isGeocodableAddress` asks "could this ever resolve at all". Without the second,
+        // a company whose only address data is "MI" is attempted on every single delivery and can
+        // never succeed — which, now that the state is only stamped on success, would be a permanent
+        // retry instead of a permanent failure.
+        runGeo = isGeocodableAddress(brf.get) && addressNeedsGeocode(geocodeAddress, state?.geocodedAddress);
       } catch { /* if we can't read state, fall back to non-address enrichers only */ }
     }
     const enrichers = runGeo ? defaultEnrichers : defaultEnrichers.filter((e) => !e.addressDependent);
@@ -100,7 +105,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         );
         enrich = { applied: r.applied.length, skipped: r.skipped.length, fields: r.applied.map((a) => a.businessKey), ranGeo: runGeo };
         // Remember the address county/geo just ran on, so they don't re-geocode until it changes.
-        if (!dryRun && runGeo && geocodeAddress) await setEnricherState(companyId, { geocodedAddress: geocodeAddress });
+        //
+        // 🔴 ONLY IF THE GEOCODE ACTUALLY PRODUCED SOMETHING. This used to stamp the state whenever
+        // geo was ATTEMPTED, which turned any transient failure into a permanent one: the address is
+        // marked "already geocoded", `addressNeedsGeocode` returns false from then on, and the
+        // company keeps a blank county and geo_disadvantaged forever. Found on "Wayne"
+        // (6aa1b1bf860f0045961d1bca, 2026-09-09): state held
+        // geocodedAddress="1722 littlestone rd|grosse pointe woods|michigan|48236" while county and
+        // geo_disadvantaged were both blank — a Michigan address in Wayne County that the app had
+        // permanently given up on. Both are grant-eligibility dimensions (SBSH gates on county), so a
+        // silent blank is a wrong answer, not a missing one.
+        //
+        // The test is the OUTCOME on the record, not the return value: a geocode that succeeds leaves
+        // county or geo_disadvantaged populated — including the legitimate out-of-Michigan case,
+        // where geo_disadvantaged is the string "None" rather than empty. Nothing populated means
+        // the lookup did not land, so the state is left alone and the next delivery retries.
+        if (!dryRun && runGeo && geocodeAddress) {
+          const after = await readRecordFields('business', companyId);
+          const landed = ['county', 'geo_disadvantaged'].some((k) => {
+            const v = after.get(k);
+            return v != null && v !== '';
+          });
+          if (landed) await setEnricherState(companyId, { geocodedAddress: geocodeAddress });
+        }
       } catch (e: any) {
         enrich = { error: e?.message ?? 'enrichment failed' };
       }
