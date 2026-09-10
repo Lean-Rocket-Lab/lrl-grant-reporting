@@ -6,6 +6,51 @@
 >
 > **Last refreshed:** 2026-09-10 (Thursday).
 >
+> ---
+> ## 🔴 HANDOFF TO CLAUDE CODE — 2026-09-10: Zoom note writer is WRITTEN and UNCOMMITTED
+>
+> **Read `docs/sprints/zoom-notes-appointments.md` §1b and §4b first.** Both proof gates passed; the
+> code below is build-order step 3 (notes only — attendance/status is deliberately NOT in this pass,
+> because a wrong `noshow` pushes an activity into `NON_EVENT_STATUSES` and silently deletes a
+> funder-reportable meeting).
+>
+> **Uncommitted, ~1,376 lines, `npx tsc --noEmit` CLEAN, tests NOT YET RUN:**
+> `lib/zoom/{config,errors,client,summaries,noteBody,index}.ts` · `lib/ghl/appointments.ts` ·
+> `lib/activities/zoomNotes.ts` · `scripts-ts/{zoom-notes-run,create-zoom-notes-table}.ts` ·
+> `lib/zoom/__tests__/summaries.test.ts` · `lib/activities/__tests__/zoomNotes.test.ts` ·
+> plus `zoomAppointmentNotes` appended to `lib/db/schema.ts`.
+>
+> ⚠️ **The tests were never executed.** The Cowork session that wrote them runs on Linux and this
+> repo's `node_modules` is a macOS install (`@rollup/rollup-darwin-arm64`, `@esbuild/darwin-arm64`),
+> so vitest could not load its native binary. `tsc` passes; **treat the 27 test cases as unverified
+> until `npm test` is green on a Mac.** Do not commit before that — the house rule is
+> `tsc --noEmit && vitest run && git commit`, and this repo has already shipped once on a
+> green-looking grep of a red run.
+>
+> **Do this, in order:**
+> 1. `npx vite-node scripts-ts/create-zoom-notes-table.ts` — additive, idempotent
+> 2. `npm test` — fix whatever the 27 cases catch
+> 3. `npx vite-node scripts-ts/zoom-notes-run.ts --days 7` — DRY RUN, writes nothing. The number that
+>    matters is the occurrence hit rate: how many Zoom-linked appointments resolve to an occurrence
+>    versus `skip:no-occurrence`. The brief's bar is ≥90%.
+> 4. Only then `--apply`, and only after step 5.
+> 5. ⬜ **STILL UNMEASURED and it gates any backfill: does `toNotify:false` actually suppress LRL's
+>    LIVE automations?** The 9/10 probe ran in the sandbox, which has none of the live workflows. One
+>    live appointment, watched for a webhook delivery and a `change_log` row. The note writer does not
+>    send `toNotify` at all (notes have no such flag) — this gates the *status* writer, step 4.
+>
+> **The two design decisions a reviewer should check rather than assume:**
+> - **Noop is a body HASH, not just a note id.** The id prevents duplicate notes; the hash prevents the
+>   rewrite, because GHL bumps `dateUpdated` on a byte-identical write (measured). An unchanged body
+>   must produce ZERO HTTP calls.
+> - **Every note carries an invisible `<!-- lrl:zoom-summary -->` marker.** With no `DATABASE_URL`, or
+>   for an appointment predating the ledger, the writer finds its own note by scanning for that marker
+>   instead of appending a second one. A staff-authored note is left alone.
+>
+> Detail sections are deliberately not inlined (§6b: the summary misattributes speakers) — only the
+> recap, the next steps, the doc link, and a provenance line.
+> ---
+>
 > **✅ THE BEST DAY SINCE THE SHEET IMPORTER — ten commits landed 9/09, 11:57→17:05, tree clean and
 > level with origin at `25854ea`.** Two clean-tree runs back to back. Every one of the ten is integrity
 > work on the intake chain, and three found real live faults rather than adding features:
@@ -1138,6 +1183,26 @@ share both halves of the key.
 ## Blockers & open decisions
 
 **Immediate**
+- **⬜ NEW 2026-09-10, DEFERRED BY ZACH — the repo is PUBLIC so that Vercel will deploy it.** Vercel's
+  Hobby plan refuses a private repo owned by a GitHub **organization**, which is what silently ate the
+  `d8f164d` deployment: repo went private at 11:18, the push was 11:13:56, and the build was refused
+  before reading any code (from the API a refused build and a missing webhook look identical — the
+  giveaway was Vercel's email, not the deployment list). Zach set it back to public: *"For now I made
+  it public. We will revisit that later."*
+
+  **What the exposure actually is:** no committed secrets — `.env.local` is gitignored
+  (`.gitignore:37`), there are no tracked `.env`/key/credential files, and `reports/` is untracked so
+  every census and remap plan stays out of git. What IS public is client identity: of the **82 client
+  companies** in the live metrics data, **25 tracked files name at least one**, most incidentally
+  (`Lean Rocket Lab`) but `docs/sprints/sheet-import.md` names real clients. Plus the whole grant and
+  funder logic, the field keys, and the GHL object structure.
+
+  **The three ways out, when this is revisited:** (a) Vercel Pro, ~$20/mo, the cheapest fix; (b) deploy
+  from GitHub Actions with a Vercel token, which sidesteps the visibility check but adds a secret to
+  keep in three places — the exact stale-`WIX_API_TOKEN` trap this project has hit twice; (c) stay
+  public. 🔴 **Note that going private later does not unring this:** the repo has been public for
+  months and public repos are crawled and cached, so scrubbing client names is a separate job from
+  flipping the switch.
 - **⬜ NEW 2026-09-10 — RUN THE METRICS PERIOD REMAP. 189 live snapshots are filed one month early.**
   Zach: *"The Metric reporting cycles are April 1 – September 30 and October 1 – March 31."*
   `reportingPeriodFor()` had been built from an earlier reading ("September for an October 15th date")
