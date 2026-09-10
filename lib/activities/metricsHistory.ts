@@ -13,7 +13,7 @@ import { GhlClient, ghl } from '../ghl/client';
 import { getCatalog } from '../ghl/catalogCache';
 import { getRelatedRecordIds } from '../ghl/associations';
 import { ACTIVITIES_OBJECT, activityFieldSet, bareKey } from './schema';
-import { reportingPeriodFor } from './reportingPeriod';
+import { reportingPeriodFromEnd } from './reportingPeriod';
 
 export interface MetricsPeriod {
   /** Period end, YYYY-MM-DD — the record's `reporting_period`. */
@@ -74,8 +74,10 @@ export async function metricsHistoryForCompany(
   const periods: MetricsPeriod[] = snapshots
     .map((s) => {
       const end = String(s.props.reporting_period ?? '').slice(0, 10);
-      // A snapshot written before the period was derived still sorts and labels correctly.
-      const label = end ? reportingPeriodFor(`${end}T12:00:00Z`).label : 'Unknown period';
+      // Labelled from the stored end itself, NOT by feeding it back through the submission rule: a
+      // snapshot written under the old Feb-end/Aug-end boundaries would otherwise be relabelled as a
+      // window it never described, which is worse than showing the window it actually holds.
+      const label = end ? reportingPeriodFromEnd(end).label : 'Unknown period';
       return { end, label, activityId: s.id };
     })
     .filter((p) => p.end)

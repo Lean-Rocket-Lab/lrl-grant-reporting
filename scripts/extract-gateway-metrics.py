@@ -27,9 +27,10 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[2] / "Past Grant Reports" / "Gateway"
 
-# Filename → the date the workbook was submitted for. Gateway's April/October cadence lands exactly
-# on the Feb-end/Aug-end boundaries `reportingPeriodFor()` already uses, so no new period logic is
-# needed — but the mapping from FILE to date must be explicit. The filenames are inconsistent
+# Filename → the date the workbook was submitted for. Gateway's 15 April / 15 October submission
+# dates fall inside the collection month after a window closes, so `reportingPeriodFor()` maps them
+# onto its Mar-end/Sep-end boundaries with no new period logic here (a 15 April submission reports
+# the window that closed 31 March) — but the mapping from FILE to date must be explicit. The filenames are inconsistent
 # ("Apr2023", "Apr24", "Oct2025"), and inferring a year from two digits is how a 2023 workbook ends
 # up filed under 2024.
 WORKBOOKS = [

@@ -393,11 +393,12 @@ assumed period. That is fabricated history, and a wrong period on a funder snaps
 227 rows, 225 (99%) carrying an email.** One row per company per period, already reconciled and sent
 to MEDC. Brief: `docs/sprints/gateway-metrics-import.md`.
 
-**The periods need NO new logic.** Zach's rule is already encoded in `reportingPeriod.ts` (windows end
-Feb-end / Aug-end), and Gateway's April/October cadence lands exactly on those boundaries — pass each
-workbook's nominal submission date to `reportingPeriodFor()`:
-Apr2023→**2023-02-28** · Oct2023→**2023-08-31** · Apr2024→**2024-02-29** · Oct2024→**2024-08-31** ·
-Apr2025→**2025-02-28** · Oct2025→**2025-08-31** · Apr2026→**2026-02-28**. Seven distinct periods, and
+**The periods need NO new logic.** Zach's rule is encoded in `reportingPeriod.ts` (windows end
+**Mar-end / Sep-end** — corrected 2026-09-10, see Immediate; they read Feb-end/Aug-end until then), and
+Gateway's April/October submission dates fall inside the collection month that follows a window's
+close — pass each workbook's nominal submission date to `reportingPeriodFor()`:
+Apr2023→**2023-03-31** · Oct2023→**2023-09-30** · Apr2024→**2024-03-31** · Oct2024→**2024-09-30** ·
+Apr2025→**2025-03-31** · Oct2025→**2025-09-30** · Apr2026→**2026-03-31**. Seven distinct periods, and
 **none collides with the live 2026-08-31 snapshot.**
 
 Columns map ~1:1 onto the metrics activity (jobs created/retained, commercialized products, pipeline,
@@ -1137,6 +1138,22 @@ share both halves of the key.
 ## Blockers & open decisions
 
 **Immediate**
+- **⬜ NEW 2026-09-10 — RUN THE METRICS PERIOD REMAP. 189 live snapshots are filed one month early.**
+  Zach: *"The Metric reporting cycles are April 1 – September 30 and October 1 – March 31."*
+  `reportingPeriodFor()` had been built from an earlier reading ("September for an October 15th date")
+  and ended its windows **Feb-end / Aug-end** — the collection months were right, the window a month
+  short. Code, tests and docs are corrected and pushed; **the live records are not.** Dry run is clean
+  and reviewed — 189/189 a 1:1 move, every company resolved, every claim matched, 0 skips:
+
+  ```bash
+  npx vite-node scripts-ts/metrics-period-remap.ts --apply --yes
+  ```
+
+  Then re-run `npx tsx scripts-ts/metrics-period-census.ts` to confirm 8 new boundaries and
+  189/189 names carrying a company. 🔴 **Until it runs, a Client Reporting submission for one of
+  these windows computes the corrected key, finds no claim, and creates a SECOND snapshot for a
+  half-year that already has one** — the period is half the idempotency key, which is why the script
+  rewrites `source_record_id` and the Postgres claim row, not just `reporting_period`.
 - **⬜ NEW 2026-09-10 — `ZOOM_*` are in `.env.local` ONLY. They must also be in Vercel AND GitHub
   Actions secrets** before anything Zoom-related runs deployed or nightly. Four vars:
   `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN`. **The

@@ -55,7 +55,7 @@ const METRICS_SOURCE = 'Form';
 (async () => {
   const { ghl } = await import('../lib/ghl/client');
   const { enumerateAllContacts } = await import('../lib/ghl/contacts');
-  const { planSnapshot, snapshotKey } = await import('../lib/activities/sources/gatewayMetrics');
+  const { planSnapshot, snapshotKey, nameSnapshot } = await import('../lib/activities/sources/gatewayMetrics');
   const { upsertActivity } = await import('../lib/activities/upsert');
   const { checkCompanyIdentity } = await import('../lib/sync/identityGuard');
   const c = ghl();
@@ -246,6 +246,9 @@ const METRICS_SOURCE = 'Form';
       sourceRecordId = `company:${company.id}:${plan.periodEnd}`;
       bump('note:company-keyed (no single contact to attribute it to)');
     }
+
+    // The company is only known now, so the snapshot's name is completed here — see nameSnapshot.
+    nameSnapshot(plan, company.name);
 
     const res = await upsertActivity(
       { source: METRICS_SOURCE as any, sourceRecordId },

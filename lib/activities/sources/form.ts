@@ -27,7 +27,8 @@ import { getCatalog } from '../../ghl/catalogCache';
 import { upsertActivity, type ActivitySource, type UpsertActivityResult } from '../upsert';
 import { OPPORTUNITY_SOURCE } from './opportunityStage';
 import { resolveRoute } from '../routes';
-import { reportingPeriodFor } from '../reportingPeriod';
+import { reportingPeriodFor, metricsActivityName } from '../reportingPeriod';
+import { getBusinessRecord } from '../../ghl/businesses';
 import { ACTIVITIES_OBJECT, activityFieldSet, bareKey, MACHINE_FIELDS } from '../schema';
 import type { CreateActivityOptions } from '../create';
 
@@ -253,7 +254,12 @@ export async function ingestFormSubmission(
     const p = reportingPeriodFor(submittedAt);
     period = p.end;
     values.reporting_period = p.end;
-    values.activity_name = `Metrics – ${p.label}`;
+    // The company name is fetched here rather than left to createActivity's default, because the
+    // name must also be CORRECTED on re-ingestion: `upsertActivity` only rewrites fields the caller
+    // supplies, so a snapshot named before this convention existed is fixed by the next submission
+    // instead of keeping a name that identifies nobody.
+    const company = await getBusinessRecord(companyId, client).catch(() => null);
+    values.activity_name = metricsActivityName(String(company?.properties?.name ?? ''), p.label);
     values.activity_date = p.end;
     sourceRecordId = `${input.contactId}:${p.end}`;
   } else {

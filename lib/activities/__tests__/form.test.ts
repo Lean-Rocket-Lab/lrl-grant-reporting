@@ -51,7 +51,7 @@ const CONTACT = {
   ],
 };
 
-function makeClient(opts: { opportunities?: any[]; contact?: any } = {}) {
+function makeClient(opts: { opportunities?: any[]; contact?: any; company?: string | null } = {}) {
   const contact = opts.contact === undefined ? CONTACT : opts.contact;
   return {
     locationId: 'LOC',
@@ -63,6 +63,10 @@ function makeClient(opts: { opportunities?: any[]; contact?: any } = {}) {
       if (path === `/custom-fields/object-key/${ACTIVITIES_OBJECT}`) return { fields: ACT_FIELDS, folders: ACT_FOLDERS };
       if (path.includes('/customFields')) return { customFields: CONTACT_FIELDS };
       if (path === '/opportunities/search') return { opportunities: opts.opportunities ?? [] };
+      // A metrics snapshot's name carries the company, so the adapter reads the business record.
+      if (path.startsWith('/objects/business/records/')) {
+        return opts.company === null ? {} : { record: { id: 'b1', properties: { name: opts.company ?? 'Jarsa' } } };
+      }
       throw new Error(`unexpected ${path}`);
     },
   } as any;
@@ -104,16 +108,24 @@ describe('ingestFormSubmission — metrics', () => {
     const client = makeClient();
     const r = await ingestFormSubmission({ contactId: 'c1', formId: METRICS_FORM }, { client, submittedAt: '2026-09-12' });
     expect(r.status).toBe('ingested');
-    expect(r.reportingPeriod).toBe('2026-08-31');
-    expect(mockUpsert.mock.calls[0][0]).toEqual({ source: FORM_SOURCE, sourceRecordId: 'c1:2026-08-31' });
+    expect(r.reportingPeriod).toBe('2026-09-30');
+    expect(mockUpsert.mock.calls[0][0]).toEqual({ source: FORM_SOURCE, sourceRecordId: 'c1:2026-09-30' });
   });
 
   it('derives the period from the submission date, not from the client', async () => {
     const client = makeClient();
     await ingestFormSubmission({ contactId: 'c1', formId: METRICS_FORM }, { client, submittedAt: '2026-03-10' });
     const values = mockUpsert.mock.calls[0][1].values;
-    expect(values.reporting_period).toBe('2026-02-28');
-    expect(values.activity_name).toBe('Metrics – Sep 2025–Feb 2026');
+    expect(values.reporting_period).toBe('2026-03-31');
+    // The company is part of the name (Zach, 2026-09-10) — these records are read in flat lists at
+    // report time, where "Metrics – Oct 2025–Mar 2026" identifies nobody.
+    expect(values.activity_name).toBe('Metrics – Jarsa – Oct 2025–Mar 2026');
+  });
+
+  it('still names the snapshot when the company record cannot be read', async () => {
+    const client = makeClient({ company: null });
+    await ingestFormSubmission({ contactId: 'c1', formId: METRICS_FORM }, { client, submittedAt: '2026-03-10' });
+    expect(mockUpsert.mock.calls[0][1].values.activity_name).toBe('Metrics – Oct 2025–Mar 2026');
   });
 
   it('gives a resubmission the SAME key, so it corrects rather than duplicates', async () => {

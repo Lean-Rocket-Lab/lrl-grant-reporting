@@ -4,7 +4,7 @@
 // Brief: docs/sprints/gateway-metrics-import.md.
 
 import { describe, it, expect } from 'vitest';
-import { planSnapshot, snapshotKey, FIELD_MAP, type GatewayRow } from '../sources/gatewayMetrics';
+import { planSnapshot, snapshotKey, nameSnapshot, FIELD_MAP, type GatewayRow } from '../sources/gatewayMetrics';
 import { reportingPeriodFor } from '../reportingPeriod';
 
 const row = (over: Partial<GatewayRow> = {}): GatewayRow => ({
@@ -31,16 +31,17 @@ const row = (over: Partial<GatewayRow> = {}): GatewayRow => ({
 });
 
 describe('the seven Gateway periods', () => {
-  // Gateway's April/October cadence lands exactly on the Feb-end/Aug-end boundaries the existing
-  // function already knows, which is why this import adds NO period logic of its own.
+  // Every workbook was submitted on 15 April or 15 October — inside the collection month that
+  // follows a window's close — so they land on the Mar-end/Sep-end boundaries the existing function
+  // already knows, which is why this import adds NO period logic of its own.
   const EXPECTED: Array<[string, string, string]> = [
-    ['2023-04-15', '2023-02-28', 'Sep 2022–Feb 2023'],
-    ['2023-10-15', '2023-08-31', 'Mar–Aug 2023'],
-    ['2024-04-15', '2024-02-29', 'Sep 2023–Feb 2024'],
-    ['2024-10-15', '2024-08-31', 'Mar–Aug 2024'],
-    ['2025-04-15', '2025-02-28', 'Sep 2024–Feb 2025'],
-    ['2025-10-15', '2025-08-31', 'Mar–Aug 2025'],
-    ['2026-04-15', '2026-02-28', 'Sep 2025–Feb 2026'],
+    ['2023-04-15', '2023-03-31', 'Oct 2022–Mar 2023'],
+    ['2023-10-15', '2023-09-30', 'Apr–Sep 2023'],
+    ['2024-04-15', '2024-03-31', 'Oct 2023–Mar 2024'],
+    ['2024-10-15', '2024-09-30', 'Apr–Sep 2024'],
+    ['2025-04-15', '2025-03-31', 'Oct 2024–Mar 2025'],
+    ['2025-10-15', '2025-09-30', 'Apr–Sep 2025'],
+    ['2026-04-15', '2026-03-31', 'Oct 2025–Mar 2026'],
   ];
 
   it.each(EXPECTED)('a workbook submitted %s covers the window ending %s', (submitted, end, label) => {
@@ -55,10 +56,10 @@ describe('the seven Gateway periods', () => {
   });
 
   it('none of them is the live 2026-09-02 snapshot period', () => {
-    // The snapshot created on 2026-09-02 sits in the window ending 2026-08-31. If any workbook
+    // The snapshot created on 2026-09-02 sits in the window ending 2026-09-30. If any workbook
     // derived that period, the import would overwrite a real submission with spreadsheet history.
     const live = reportingPeriodFor('2026-09-02').end;
-    expect(live).toBe('2026-08-31');
+    expect(live).toBe('2026-09-30');
     expect(EXPECTED.map(([s]) => reportingPeriodFor(s).end)).not.toContain(live);
   });
 });
@@ -66,10 +67,16 @@ describe('the seven Gateway periods', () => {
 describe('planSnapshot', () => {
   it('stamps the derived period on the record three ways', () => {
     const p = planSnapshot(row({ jobs_created: 2 }))!;
-    expect(p.periodEnd).toBe('2023-02-28');
-    expect(p.values.reporting_period).toBe('2023-02-28');
-    expect(p.values.activity_date).toBe('2023-02-28');
-    expect(p.values.activity_name).toBe('Metrics – Sep 2022–Feb 2023');
+    expect(p.periodEnd).toBe('2023-03-31');
+    expect(p.values.reporting_period).toBe('2023-03-31');
+    expect(p.values.activity_date).toBe('2023-03-31');
+    // Unnamed company until the runner resolves it — see nameSnapshot below.
+    expect(p.values.activity_name).toBe('Metrics – Oct 2022–Mar 2023');
+  });
+
+  it('nameSnapshot stamps the resolved company into the name', () => {
+    const p = nameSnapshot(planSnapshot(row({ jobs_created: 2 }))!, 'Jarsa');
+    expect(p.values.activity_name).toBe('Metrics – Jarsa – Oct 2022–Mar 2023');
   });
 
   it('maps every Gateway figure to its activity field', () => {
@@ -137,12 +144,12 @@ describe('snapshotKey', () => {
   it('is exactly the key the Client Reporting form adapter computes', () => {
     // Identity is (source, source_record_id). Claiming the form's key means a real submission for
     // one of these periods UPDATES the imported snapshot instead of creating a second one.
-    expect(snapshotKey('abc123', '2023-02-28')).toBe('abc123:2023-02-28');
+    expect(snapshotKey('abc123', '2023-03-31')).toBe('abc123:2023-03-31');
   });
 
   it('separates two periods for the same contact, and two contacts in one period', () => {
-    expect(snapshotKey('abc', '2023-02-28')).not.toBe(snapshotKey('abc', '2023-08-31'));
-    expect(snapshotKey('abc', '2023-02-28')).not.toBe(snapshotKey('xyz', '2023-02-28'));
+    expect(snapshotKey('abc', '2023-03-31')).not.toBe(snapshotKey('abc', '2023-09-30'));
+    expect(snapshotKey('abc', '2023-03-31')).not.toBe(snapshotKey('xyz', '2023-03-31'));
   });
 });
 

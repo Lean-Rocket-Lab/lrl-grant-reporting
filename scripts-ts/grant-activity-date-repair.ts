@@ -114,7 +114,9 @@ async function main(){
   // How far off were they? A period-attribution error only matters if it crosses a boundary.
   const months=new Set(plan.map((p)=>`${p.from.slice(0,7)}->${p.to.slice(0,7)}`));
   console.log(`\ndistinct month moves: ${months.size}`);
-  const halves=(d:string)=>{const [y,m]=d.split('-').map(Number); return `${m<=2?y-1:m<=8?y:y}H${m<=2?2:m<=8?1:2}`;};
+  // Reporting halves are Apr 1 – Sep 30 and Oct 1 – Mar 31 (Zach, 2026-09-10). This helper used the
+  // old Feb/Aug boundaries and so under-reported the very number the next line exists to print.
+  const halves=(d:string)=>{const [y,m]=d.split('-').map(Number); return m<=3?`${y-1}H2`:m<=9?`${y}H1`:`${y}H2`;};
   const crossing=plan.filter((p)=>halves(p.from)!==halves(p.to)).length;
   console.log(`records whose REPORTING PERIOD changes as a result: ${crossing}/${plan.length}  <-- the reason this matters`);
 

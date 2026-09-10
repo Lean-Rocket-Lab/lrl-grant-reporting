@@ -14,7 +14,7 @@
 //
 // This is a ONE-TIME import of history. Ongoing capture is the Client Reporting form (webhook #3).
 
-import { reportingPeriodFor } from '../reportingPeriod';
+import { reportingPeriodFor, metricsActivityName } from '../reportingPeriod';
 
 /** One extracted workbook row, as `scripts/extract-gateway-metrics.py` emits it. */
 export interface GatewayRow {
@@ -97,8 +97,9 @@ export interface PlannedSnapshot {
  * Turn one workbook row into the metrics snapshot it represents, or null if it reports nothing.
  *
  * The period comes from `reportingPeriodFor(submitted_at)` — the SAME function the Client Reporting
- * form adapter uses. Gateway's April/October cadence lands exactly on the Feb-end/Aug-end boundaries
- * that function already knows, so this import adds no period logic of its own. That matters because
+ * form adapter uses. Gateway's 15 April / 15 October submission dates land squarely inside the
+ * Mar-end/Sep-end collection months that function already knows, so this import adds no period logic
+ * of its own (a 15 April submission reports the window that closed 31 March). That matters because
  * the period is half of the idempotency key: derive it two ways and you get either a collision or a
  * second snapshot for one half-year, and a follow-on-funding figure counted twice still looks
  * plausible on review.
@@ -121,7 +122,9 @@ export function planSnapshot(row: GatewayRow): PlannedSnapshot | null {
 
   values.reporting_period = p.end;
   values.activity_date = p.end;
-  values.activity_name = `Metrics – ${p.label}`;
+  // The company is stamped by the runner, which is what resolves it (see `nameSnapshot`). Named here
+  // without it so a plan is never silently unnamed if the caller skips that step.
+  values.activity_name = metricsActivityName(null, p.label);
 
   const provenance = [
     `[imported from the Gateway semi-annual report submitted ${row.submitted_at}`,
@@ -149,3 +152,15 @@ export function planSnapshot(row: GatewayRow): PlannedSnapshot | null {
  * one duplicate per period per company. Provenance is a field (`activity_notes`), not an identity.
  */
 export const snapshotKey = (contactId: string, periodEnd: string) => `${contactId}:${periodEnd}`;
+
+/**
+ * Stamp the resolved company onto a planned snapshot's name.
+ *
+ * `planSnapshot` works from one workbook row and cannot know the company: resolution is the runner's
+ * job (email → guarded unique name) and can fail. So the name is completed here, once the company is
+ * known, rather than having `planSnapshot` take a name it would have to be handed anyway.
+ */
+export function nameSnapshot(plan: PlannedSnapshot, companyName: string | null | undefined): PlannedSnapshot {
+  plan.values.activity_name = metricsActivityName(companyName, plan.periodLabel);
+  return plan;
+}

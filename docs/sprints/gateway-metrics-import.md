@@ -30,24 +30,31 @@ Measured across `Past Grant Reports/Gateway/`:
 
 ## The period derivation — reuse `reportingPeriodFor()`, add nothing
 
-Zach's rule, already encoded in `lib/activities/reportingPeriod.ts`: *"Client Reporting is typically
-done in September for an October 15th date, and in March for an April 15th date."* Windows end
-**Feb-end** and **Aug-end**. Gateway's April/October cadence lands exactly on those boundaries, so
-passing each workbook's nominal submission date to the existing function yields the right period with
-**no new period logic**:
+> **⚠️ SUPERSEDED 2026-09-10.** The boundaries below were wrong by one month. Zach: *"The Metric
+> reporting cycles are April 1 – September 30 and October 1 – March 31."* Windows end **Mar-end** and
+> **Sep-end**; `lib/activities/reportingPeriod.ts` and this table's `reporting_period` column were
+> corrected, and the 189 snapshots already written were moved by
+> `scripts-ts/metrics-period-remap.ts`. The workbook-to-submission-date mapping is unchanged — only
+> the window each date resolves to. Kept as written because it records what the import actually did.
+
+Zach's rule, encoded in `lib/activities/reportingPeriod.ts`: surveys are collected in the boundary
+month or the one after — September/October for Apr–Sep, March/April for Oct–Mar — and reports are
+filed on the 15th of April and October for the window that just closed. Gateway's April/October
+submission dates land inside those collection months, so passing each workbook's nominal submission
+date to the existing function yields the right period with **no new period logic**:
 
 | Workbook | Pass as `submittedAt` | → `reporting_period` | Label |
 |---|---|---|---|
-| Apr 2023 | 2023-04-15 | **2023-02-28** | Sep 2022–Feb 2023 |
-| Oct 2023 | 2023-10-15 | **2023-08-31** | Mar–Aug 2023 |
-| Apr 2024 | 2024-04-15 | **2024-02-29** | Sep 2023–Feb 2024 |
-| Oct 2024 | 2024-10-15 | **2024-08-31** | Mar–Aug 2024 |
-| Apr 2025 | 2025-04-15 | **2025-02-28** | Sep 2024–Feb 2025 |
-| Oct 2025 | 2025-10-15 | **2025-08-31** | Mar–Aug 2025 |
-| Apr 2026 | 2026-04-15 | **2026-02-28** | Sep 2025–Feb 2026 |
+| Apr 2023 | 2023-04-15 | **2023-03-31** | Oct 2022–Mar 2023 |
+| Oct 2023 | 2023-10-15 | **2023-09-30** | Apr–Sep 2023 |
+| Apr 2024 | 2024-04-15 | **2024-03-31** | Oct 2023–Mar 2024 |
+| Oct 2024 | 2024-10-15 | **2024-09-30** | Apr–Sep 2024 |
+| Apr 2025 | 2025-04-15 | **2025-03-31** | Oct 2024–Mar 2025 |
+| Oct 2025 | 2025-10-15 | **2025-09-30** | Apr–Sep 2025 |
+| Apr 2026 | 2026-04-15 | **2026-03-31** | Oct 2025–Mar 2026 |
 
 Seven distinct periods. **None collides with the live snapshot created 2026-09-02** (period
-`2026-08-31`), so the import cannot disturb it. Assert these seven values in a test rather than
+`2026-09-30`), so the import cannot disturb it. Assert these seven values in a test rather than
 trusting the derivation silently — the period is half the idempotency key.
 
 ## Column map — `Companies Served` tab, header row 4, data from row 5
