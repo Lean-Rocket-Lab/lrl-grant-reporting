@@ -4,79 +4,96 @@
 > Start every planning chat here. Refreshed daily by the maintenance routine.
 > Companion docs: `PROJECT_ROADMAP.md` (the phase/sprint plan) · `CANONICAL_REPORTING_MODEL.md` (data spec).
 >
-> **Last refreshed:** 2026-09-09 (Wednesday).
+> **Last refreshed:** 2026-09-10 (Thursday).
 >
-> **✅ THE STALL BROKE — four commits landed 9/08, and the tree is CLEAN.** No commits 9/05–9/07; then
-> 9/08 12:41→17:14 delivered `9d50580`, `e7824ce`, `4083d10`, `5eeae04`. **`0 ahead / 0 behind` at
-> `5eeae04`, working tree clean** — the first fully clean tree in five runs, which also retires the
-> `stage-dupe-audit.ts` flag and unblocks the `reports/` backlog (archived today, see the doc map).
+> **✅ THE BEST DAY SINCE THE SHEET IMPORTER — ten commits landed 9/09, 11:57→17:05, tree clean and
+> level with origin at `25854ea`.** Two clean-tree runs back to back. Every one of the ten is integrity
+> work on the intake chain, and three found real live faults rather than adding features:
+> - **`17ed375` — one failed geocode was disabling a company's geo enrichment *forever*.** Zach spotted
+>   that "Wayne" never ran its enrichers despite a full address. `/api/sync/up` stamped
+>   `geocodedAddress` when geo was **ATTEMPTED**, not when it **LANDED**, so `addressNeedsGeocode`
+>   compared address-to-stamp, matched, and returned false. **24 companies were in that state**, and
+>   `county` gates SBSH eligibility (Jackson/Lenawee/Hillsdale) — so a silent blank is a *wrong answer*,
+>   not a missing one. All 24 stamps cleared. The second half is the subtle part: stamping on success
+>   alone would trade a permanent failure for a permanent retry, because **12 of the 24 read
+>   `(No value), (No value), MI`** — GHL's literal stored string, not data. `isGeocodableAddress` now
+>   requires something that can actually resolve a county; a bare state does not attempt.
+> - **`ad9cbeb` — a suppressed write and "nothing happened" were indistinguishable.** The change-log row
+>   was gated on `guard.keep.length`, so a fully suppressed change set produced **no row at all**. That
+>   is how Aiden's company sat at `mrl_current = 6` while its stage record said `7`. Suppressions now
+>   log their own `applied: false` row in both directions, carrying from/to and every reason.
+> - **`62fc293` + `f8dce1e` — the verification got real.** The trigger-gate fix is pinned by a test
+>   *verified against the bug* (revert the line → two of six fail; restore → pass), and
+>   `verify-intake-flow.ts` walks one contact through the whole chain naming which step broke. It was
+>   validated against Aiden's known-**BAD** data rather than a green case — and that smoke test caught a
+>   bug in the verifier itself: `client-stage-scorer` logs against the **stage record** id, not the
+>   company's, so filtering the change log on `companyId` alone reported "the scorer never ran" for four
+>   runs that plainly had. **A false failure on the most important check is worse than no check.**
 >
-> **🐞 What 9/08 actually was: a live data-integrity incident, correctly jumping the queue.** GHL's own
-> **backup dedupe matched a client-intake submission to an existing contact BY PHONE**, overwrote that
-> contact's email, and wrote the form's business details **straight onto the associated company** — so
-> the **Lean Rocket Lab company record itself** became "Aidens Consulting Company, 704 Maple St, Stryker
-> OH" at 19:13:55, four seconds *before* the contact updated. **Company first, contact second.**
+> **✅ THIS DOCUMENT IS NOW UNDER VERSION CONTROL (`25854ea`).** It lived one level above the repo root,
+> so the single most valuable artefact in the project had **no history and no backup** — one bad edit
+> took it with nothing to recover from. Now at `lrl-grant-reporting/docs/PROJECT_STATE.md`, moved
+> intact, with a signpost left at the old path. ⚠️ **`CLAUDE.md` and the Scheduled-task skills are
+> still outside the repo and still unversioned** — same exposure, smaller documents.
 >
-> ⚠️ **The lesson is the one worth carrying: none of it was ours, and our guards could not have helped.**
-> The change log holds **no entry at 19:13** — GHL wrote the business directly, so `identityGuard`,
-> the convergence guard and the change log were all bypassed. That also explains all three symptoms at
-> once (no stage record, no geo recompute, no spread to the 8 other LRL staff contacts): our handler
-> never ran. **Our integrity layer only protects writes that go through us.** Damage was one record,
-> restored from recovered values (change log 8/11 + the enricher's `geocodedAddress`, the address that
-> actually produced the HUBZone/OZ flags on it) rather than invented ones.
+> **🔴 `capture-coverage.ts` is TEN sessions unbuilt (9/01–9/10) — and this run is not restating it a
+> tenth time. The ⭐ spec has been CUT IN HALF.** The 9/08 experiment (write the exact spec) failed; the
+> 9/09 finding was structural. **What nobody has questioned in ten sessions is the spec's own size:**
+> 7 activity types × 4 grant definitions with per-grant bound-field fill is a two-hour job, and **D1 —
+> the half Sprint D is named for — needs only the 7-row version.** The ⭐ is now that 7-row script; the
+> grant cross-product moves to D2, where it belongs.
 >
-> **Two durable fixes came out of it, both eligibility-grade:**
-> - `business.county` / `contact.county_mi__full` held **84 options, every one a Michigan county**, so an
->   Ohio business could not be represented truthfully — it read "Jackson County (MI)", an **SBSH
->   eligibility dimension**, and would have qualified for a grant it cannot receive while looking
->   entirely ordinary. Both lists now carry **"Out of State"**, 85 options, all 83 counties intact,
->   verified by an **uncached** GET (`getFieldCatalog` is cached and reported a successful write as "did
->   not persist" — a false negative on a live picklist).
-> - 🔴 **Our write layer cannot CLEAR a single-select.** `/businesses/{id}` refuses custom fields
->   outright; the objects path drops an empty value before it reaches GHL (`written: [] skipped: []` —
->   it never even attempted). The company-side stale county needed a **manual clear in the GHL UI**.
+> **✅ ZOOM: BOTH GATES PASSED (9/09 and 9/10). The feature is cleared to build.** Full evidence in
+> `zoom-notes-appointments.md` **§1b** (Zoom) and **§4b** (GHL write probe).
 >
-> **✅ The GHL "Contact Changed" workflow is UN-PAUSED and the whole pipeline ran end to end** —
-> contact→company fired for the first time since the 8/27 incident, the enrichers computed Ohio geo, and
-> the scorer wrote a first stage record. A carried Zach-side blocker is retired **by evidence**.
+> - **Team coverage PASSED** on LRL's own S2S admin credential: **571 summaries in 30 days across FOUR
+>   hosts** (zach 289, alex 228, sierra 53, ken 1). The per-user OAuth fork is dead — build account-level.
+>   Alex's 228 are largely *"Zoom Meeting with <name> | Lean Rocket Lab Intake Meeting"*, i.e. exactly the
+>   grant-reportable appointments a Zach-only credential would have silently missed.
+> - **Attendance is STRUCTURED after all.** `past_meetings/{uuid}/participants` returns real records; the
+>   9/03 "participants don't come back" finding was an artifact of the Claude-session connector. The
+>   attendee-prose parse is abandoned.
+> - **GHL partial PUT is SAFE** — sending only `{appointmentStatus, toNotify:false}` left title, times,
+>   address and calendarId untouched. Note `Update` edits in place, so the `noop` path is viable.
+> - 🔴 **But GHL does NOT auto-noop an unchanged status** — a byte-identical re-PUT moved `dateUpdated`.
+>   **The caller must diff** (the `writeRecordFields` lesson, new endpoint), or the nightly churns every
+>   Zoom-linked appointment every night.
 >
-> **✅ Also 9/08: the stage-scoring RACE is closed.** Both call sites did check-then-act across the
-> ~12-second GHL search lag, so a burst of webhook deliveries each read `null` and created — proven by
-> creation timestamps ~2s apart (CP Design three inside 1.9s; EvaGenomics 147ms). Fixed by claiming
-> `(company, day)` in Postgres under the UNIQUE the activities ledger already has —
-> `onConflictDoNothing` **is** the mutual exclusion. 9 duplicates cleaned, **106 → 97**, multi-day
-> history untouched. **633 tests pass.** The `?echo=1` auth-order hole flagged as UNCOMMITTED yesterday
-> is now committed and pinned (`webhook-auth-order.test.ts`, 21/21).
+> ⬜ **Two things still owed before any backfill:** (1) `ZOOM_*` in **Vercel + GitHub Actions secrets**
+> (they are in `.env.local` only); (2) **one live appointment** watched for a webhook delivery and a
+> `change_log` row, to prove `toNotify:false` suppresses LRL's real automations — the sandbox has none
+> of them, so nothing measured on 9/10 speaks to that.
 >
-> **🔴 `capture-coverage.ts` is now NINE sessions unbuilt (9/01–9/09).** Yesterday's run wrote the exact
-> spec into the ⭐ section on the theory that ⭐ fix 1 moved the hour it became an instruction. **That
-> theory has now been tested and it did not hold** — the spec was there all day, real work happened, and
-> the file still does not exist. What displaced it was legitimate (a live record being silently
-> corrupted beats an instrument), so this is not a discipline finding. It is a **structural** one: an
-> instrument that only gets built on a quiet day never gets built, because quiet days are when nothing
-> forces the calendar.
+> *(The `CLIENT_LINK_SECRET` blocker was voided 9/09 — the app-hosted client page was scrapped 9/08 in
+> favour of a GHL-hosted scoring form, and the app now has **zero public routes**. The reasoning lives
+> in the dashboard row and `_briefs/2026-09-09.md` and is deliberately not repeated at the top of this
+> document any more.)*
 >
-> **✅ THE `CLIENT_LINK_SECRET` BLOCKER IS DEAD — THE FEATURE IT BLOCKED WAS SCRAPPED ON 9/08.** This
-> doc carried it for five days and was one edit away from carrying it a sixth. **Zach deleted the
-> app-hosted client page** (`/client-reporting/profile`, `/api/client-profile`, `lib/clientProfile/`,
-> `lib/security/clientToken.ts`, `mint-rescore-links.ts` → gitignored `_to_delete/scrapped-client-page/`)
-> in favour of a **GHL-hosted scoring form**, on the reasoning that *GoHighLevel is already
-> internet-facing and is the vendor's problem, while this app holds every credential LRL owns.*
-> `grep CLIENT_LINK_SECRET` over `lib/ pages/ scripts-ts/ middleware.ts` returns **nothing**, and
-> `PUBLIC_PREFIXES` is now **`['/staff-login', '/api/staff/login']`** — **the app has ZERO public
-> routes.** There is no env var to set, no 503 to clear, and no 130 links to mint.
-> ⚠️ **Same failure mode as the security 401**: a blocker was restated daily while the thing it
-> described had already changed. The check that caught it was reading the memory file, which was more
-> current than this document.
+> ---
+>
+> *Historical, condensed 2026-09-10 — the 9/08 incident summary that stood here has moved to its
+> dashboard row. Headline kept because it shapes design: **GHL's own backup dedupe matched a client
+> intake to an existing contact BY PHONE and wrote the form's business details straight onto the
+> associated company** — LRL's own record — with **no change-log entry**, because GHL wrote the business
+> directly and our handler never ran. **Our integrity layer only protects writes that pass through
+> us.***
+>
+> The full 9/08 detail — the trace, the two eligibility-grade fixes, the un-paused workflow and the
+> stage-scoring race — is in its **four dashboard rows below**, and was removed from this header on
+> 9/10 because it was duplicated verbatim in both places. That duplication is what makes this document
+> regrow after every condense.
 >
 > **Sprint D (capture completeness, then label correctness) is the ACTIVE sprint** —
 > `lrl-grant-reporting/docs/sprints/sprint-d-capture-completeness.md`. Sprint C is **shelved, not
 > cancelled**; its grant definitions and TC column bindings stay authoritative about which fields must
 > be trustworthy.
 >
-> *Condensed 2026-08-25, 2026-09-05; pre-condense copies at `_archive/2026-08-25/`, `_archive/2026-09-05/`.*
-> ⚠️ **This document is 1,169 lines / 103 KB and is drifting back into being a log.** It has been
-> condensed twice and has regrown both times. Flagged for a third condense — see the doc map.
+> *Condensed 2026-08-25, 2026-09-05, and partially 2026-09-10 (the 9/08 header block → its dashboard
+> rows). Pre-condense copies at `_archive/2026-08-25/`, `_archive/2026-09-05/`.*
+> ⚠️ **Still flagged for a full third condense** — roughly half of what remains is closed-incident
+> narrative that `_briefs/` and `CLAUDE.md` already hold. The rule the 9/10 cut followed, and the one to
+> keep following: **cut a passage only where the same facts already exist somewhere durable**, never
+> because it is old. See the doc map.
 
 ---
 
@@ -139,7 +156,23 @@ a **GHL-hosted scoring form**, on the reasoning that GHL is already internet-fac
 every credential LRL owns — so the app now has **zero public routes**, the `CLIENT_LINK_SECRET` blocker
 this doc carried for five days is **void**, and what replaces it is a real gap: **0 of 24 scoring fields
 have a contact↔company mapping row and 12 of those contact fields do not exist at all**, `business_model`
-— the router behind the 38% unroutable rate — among them.
+— the router behind the 38% unroutable rate — among them. **Then 9/09 delivered ten commits, the
+strongest day since the sheet importer, and all of it hardened the intake chain rather than extending
+it:** a *poisoned* enricher state stamp was found and cleared on **24 companies** (geo was stamped when
+*attempted*, not when it *landed*, so one failed geocode disabled a company's county enrichment
+permanently — and county gates SBSH eligibility, so the blank was a wrong answer rather than a missing
+one); the convergence guard's **suppressions became visible** as their own `applied: false` change-log
+rows, which is what finally explained a company sitting at `mrl_current = 6` while its stage record said
+`7`; the scorer's trigger gate was **pinned by a test verified against the bug itself**; and
+`verify-intake-flow.ts` now walks one contact through the entire chain and names the failing step — a
+tool built and validated against known-**bad** data, which promptly caught a false-negative in its own
+most important check. **This document was also brought under version control** (`25854ea`) after living
+its whole life outside the repo with no history and no backup. What remains inside Sprint D is unchanged:
+**the instrument** — `capture-coverage.ts` does not exist after **ten** sessions as the ⭐, and this run's
+finding is that nobody had questioned the *size* of the spec, so it has been cut to the 7-row D1 version —
+plus the two red capture cells (`workshop_event` **0**, `introduction_referral` **1**), neither of which
+is an engineering problem, and the unbuilt GHL Scoring Form. **Zoom's role-permission blocker cleared on
+9/09**; its next gate is the team-coverage probe, not a build.
 
 ---
 
@@ -174,13 +207,18 @@ have a contact↔company mapping row and 12 of those contact fields do not exist
 | **Stage-scoring duplicate race** | Sprint A / integrity | ✅ **CLOSED 9/08 (`9d50580`).** Both call sites did check-then-act — read `getCompanyStageContext` for `todayRecordId`, create if null — and that id resolves through the GHL records **SEARCH, which lags a create by ~12s**, the same lag that made activity ingestion duplicate in August. The webhook path fires on every company/contact change, so a burst delivered several scoring events inside the window and **each read null and created**. Proven by creation timestamps, not inference: CP Design's three at 21:17:13.635 / :14.035 / :15.524, EvaGenomics' two **147ms** apart. Fixed by claiming `(company, day)` in Postgres under the UNIQUE the activities ledger already has — **`onConflictDoNothing` IS the mutual exclusion**, no new table; same degradation contract as `lib/activities/claims.ts` (no DB → reports unavailable and creates anyway, because a missed score beats a rare duplicate — **but it now says so**); a failed create releases the claim so the next delivery retries. Webhook path and nightly take the same claim; **11 tests pin it**. Cleanup: 8 pairs, newest kept per company+day, **106 → 97**, 0 remaining; multi-DAY history untouched (31 companies legitimately hold several). 📌 **A correction recorded rather than buried:** an earlier audit reported 2 records "associated twice" — it had **truncated ids to 8 chars** and two records created in the same second share a prefix. The cleanup prints ids in full. **Truncated ids in a destructive script are how the wrong row gets deleted** |
 | **✅ GHL "Contact Changed" workflow UN-PAUSED** | infra / carried blocker | ✅ **RETIRED 9/08 BY EVIDENCE.** Carried since the 8/27 loop incident. With the webhook back on, the pipeline was observed running **end to end**: contact→company fired for the first time since 8/27, the contact synced to its own company, the enrichers computed geo, and the scorer wrote a first stage record. The loop's cause stays disabled in config and both guards are live |
 | **Client rescore — PIVOTED to a GHL-hosted form** | Sprint D / right-object capture | 🔄 **SCRAPPED AND REPLACED 2026-09-08.** The app-hosted page built 9/04 is **deleted** — `/client-reporting/profile`, `/api/client-profile`, `lib/clientProfile/`, `lib/security/clientToken.ts` and `mint-rescore-links.ts` all moved to gitignored `_to_delete/scrapped-client-page/`. Zach's reasoning, and it is right: *the app should be Lean Rocket Lab-facing only* — **GHL is already internet-facing and is the vendor's problem; this app holds every credential LRL owns.** `PUBLIC_PREFIXES` is now `['/staff-login','/api/staff/login']` and **the app has zero public routes**. ⚠️ **So `CLIENT_LINK_SECRET` is a DEAD blocker** — it was carried here for five days after the feature it gated ceased to exist. Replacement: a **GHL-hosted Scoring Form** whose answers land on the contact, webhook `POST /api/sync/up` syncs them UP to the company, the scorer fires (already wired), scores propagate down, then a 10-minute wait + "`trl_current` not empty" condition sends the results email. **Almost no new code** — `/api/sync/up` already does the sync and already calls `runStageScoreTrigger`. 🔴 **The measurement that forced the pivot is the durable part: there is NO contact↔company sync for ANY scoring field — 0 of 24 have a mapping row**, and **12 of the 24 contact fields do not exist at all**, including `business_model`, the router. The 7 that do exist hold **stale orphan values** from the original intake that nothing keeps in sync. ⚠️ **`config/field-mappings.json` is a LEGACY SEED FILE — the live mappings are in Postgres** (`field_mappings` + `syncs`); a grep of the JSON gives the opposite answer and nearly sent the build the wrong way. **Sync directions, one owner each (the 8/27 rule applied deliberately): 19 inputs contact → business UP only; 5 `*_current` scores business → contact DOWN only. Nothing is two-way.** Spec: `docs/sprints/scoring-form-build-spec.md`; setup: `scripts-ts/scoring-form-setup.ts`. **Live numbers still current:** 136 client contacts · 130 linked · 6 not · **21 of 56 sampled companies unroutable (~38%)** — the same wound as the scorer's 857/895 no-route, and `business_model` is one radio question that fixes it. ⚠️ **Accepted sharp edge of UP-only sync:** sticky-contact prefill shows a client their last submitted answer, so if staff corrected that value on the company since, submitting overwrites the correction. Fine for a bonus path; do not let it become the main one |
-| **`capture-coverage.ts` — Sprint D's instrument** | **Sprint D / D1** | 🔴 **STILL NOT BUILT — NINE sessions (9/01–9/09), and yesterday's intervention was tested and failed.** The 9/08 run stopped restating the bullet and wrote the **full spec** into the ⭐ section, on the evidence that ⭐ fix 1 sat six runs as a reminder and moved within an hour of becoming an exact instruction. The spec was in place all of 9/08, four commits landed, and **the file still does not exist** — so the "it just needs a precise spec" hypothesis is now disconfirmed. What displaced it was legitimate (a live record being silently corrupted outranks an instrument), which is exactly the problem: **an instrument that only gets built on a quiet day never gets built**, because a quiet day is precisely when nothing forces the calendar. ⬜ **The unanswered question is now four asks old and is the whole finding: does this get a scheduled block?** Until it exists, Sprint D is measured by `report-readiness-census.ts`, which **predates the sheet import AND the Gateway import** — so "236 activities" and "1 of 8 KPIs producible" are badly stale and should stop being quoted. Live today: **~901 activities · metrics 188 · grants 64 fully populated**. What is genuinely unknown is the thing the instrument would answer: **which activities that SHOULD exist do not** — `workshop_event` is still 0 (Wix, blocked on permissions) and `introduction_referral` is 62 with no idea what the denominator is |
+| **🐞 Poisoned enricher state — one failed geocode disabled a company's geo FOREVER** | Sprint D / D1 integrity | ✅ **FOUND + FIXED + CLEARED 9/09 (`17ed375`).** Zach spotted that "Wayne" never ran its enrichers: full Grosse Pointe Woods address, an `enricher_state` stamp saying that exact address had been geocoded, `county` and `geo_disadvantaged` **both blank**, and **no `company-enrichers` row in the change log at all**. Cause: `/api/sync/up` stamped `geocodedAddress` whenever geo was **ATTEMPTED**; `addressNeedsGeocode` then compares current address to stamp, matches, returns false. **24 companies were in that state.** `county` gates SBSH eligibility (Jackson/Lenawee/Hillsdale), so **a silent blank is a wrong answer, not a missing one.** Now stamped only when the lookup **LANDS**, tested on the *outcome* (`county` or `geo_disadvantaged` non-blank) rather than a return value — which correctly includes out-of-Michigan, where `geo_disadvantaged` is the **string `"None"`** and not empty. 🔴 **The second half is the non-obvious one:** stamping on success alone would swap a permanent failure for a permanent **retry**, because `normalizeCompanyAddress` calls it "has an address" when ANY part is set and **12 of the 24 read `(No value), (No value), MI`** — GHL's literal stored placeholder, not data. Those are now stripped, and `isGeocodableAddress` requires something that can actually resolve a county (a postal code, or a city with a state); a bare state does not attempt. All 24 stamps cleared; split verified both ways (Wayne + Jackson Precision → geocodable/needsGeocode; state-only → geocodable **false**, will not spin). 16 tests on the address logic, 663 overall |
+| **Suppressed writes are now VISIBLE instead of indistinguishable from nothing** | infra / integrity | ✅ **9/09 (`ad9cbeb`).** "The convergence guard declined this write" and "nothing happened" looked **identical**: the change-log row is gated on `guard.keep.length`, so an **entirely** suppressed change set produced no row, and a partially suppressed one logged only the survivors. That is exactly how Aiden's company came to sit at `mrl_current = 6` while its stage record said `7` — the 6→7 write was suppressed as a value repeat (**correctly**, it was flapping) and left no trace anywhere but a server `console.warn`; it could only be reconstructed by inferring from which fields were *absent* from the log. Suppressions now log their own `applied: false` row in **both** sync directions, carrying from/to and every reason, mirroring how the identity gate reports a refusal. The primary row keeps meaning "what actually landed". **667 tests, tsc clean, both gated on exit codes.** ⬜ **One gap deliberately left and now documented by a test rather than by silence** — see the blocker: `flagForReview` fires only for `guard.loops` (the oscillation kinds), so a **`non-converging`** suppression reaches nobody |
+| **The scorer's trigger gate is pinned by a test verified AGAINST the bug** | Sprint A / integrity | ✅ **9/09 (`62fc293`, `bb80568`).** The fix for Aiden's four-different-scores bug was a one-line change to how the scorer decides it has already scored today, and nothing stopped it being undone. The test asserts the exact original condition — GHL search index blind (`todayRecordId` null), the Postgres claim present, inputs unchanged — and `scoreCompany` must **NOT** be called, with `fingerprint` mocked to a constant so the comparison is exact rather than guessed. 📌 **Verified the way a regression test should be:** `trigger.ts` was reverted to the old `hasRecord` line and **two of six failed** with the right message, then restored and watched pass. **A test for this bug that passed against the bug would have been worse than none.** Also covers the other direction: genuinely changed inputs still score, and `opts.force` still overrides |
+| **`verify-intake-flow.ts` — one command that names the failing step** | Sprint D / D1 tooling | ✅ **9/09 (`f8dce1e`).** Walks one contact through the whole chain in dependency order, and **every check corresponds to a failure actually hit**, so a pass means something rather than "nothing threw": company link (**silently skips 463 contacts**), `business_model` (**864 companies are no-route**), the input blob, **ONE** scorer run, **ONE** stage record for the day, whether the company's `*_current` agrees with that record, whether the enrichers ran once, and how many distinct `runId`s touched the records — which **is** the GHL enrollment count. 📌 **Validated against Aiden's known-BAD data, not a green case, because a verifier that cannot see the bug is worthless** — it correctly reported 4 deliveries, enrichers 3×, MRL diverging record=7 / company=6. 🔴 **And the smoke test caught a bug in the verifier itself:** `client-stage-scorer` logs against the **STAGE RECORD** id, not the company's, so filtering the change log on `companyId` alone reported *"the scorer never ran"* for four runs that plainly had. **A false failure on the most important check is worse than no check.** It now matches every id in the cascade. ⬜ Check 6 is deliberately worded as an **open question**, not a fixed bug: a record/company mismatch with only one scoring run is unexplained |
+| **PROJECT_STATE.md under version control** | infra / docs | ✅ **9/09 (`25854ea`).** The tracker lived one level *above* the repo root, so the single most valuable document in the project had **no history and no backup** — every session reads it first and writes it last, and it was the only artefact with no safety net. Moved intact to `docs/PROJECT_STATE.md` (1,323 lines, pure add in that commit so the next diff shows real changes). The two references asserting a **location** were updated (`CLAUDE.md`'s entry-point line; the daily-maintenance skill's step 3, which would otherwise have quietly refreshed a signpost); the bare mentions in sprint docs need nothing, and the **25 references in `_briefs/` were left alone as dated records**. A signpost stays at the old path. ⚠️ **`CLAUDE.md` and the Scheduled-task skills are ALSO outside the repo and remain unversioned** — same exposure, smaller documents |
+| **`capture-coverage.ts` — Sprint D's instrument** | **Sprint D / D1** | 🔴 **STILL NOT BUILT — TEN sessions (9/01–9/10). New finding: the SPEC IS TOO BIG, and nobody had checked that.** Nine runs argued about attention and scheduling; none asked why a read-only script takes two hours. It is the **cross-product**: 7 activity types **×** 4 grant definitions, with per-grant bound-field fill read out of `grant-definitions.md` — 28 rows and a dependency on the grant specs. **D1, the half Sprint D is named for, needs none of that.** The ⭐ is now a **7-row** script (one row per activity type: `source`-or-`NONE` · wired-vs-built · `records_30d` excluding backfill provenance · `last_real_ingest` · verdict), which is a **~45-minute** job with no spec-reading owed. The grant cross-product becomes a `--by-grant` flag later, in D2, where the bound-field question actually belongs. *(Previous framings, all still true and all superseded as the ⭐: 9/08 wrote the full spec into this doc on the ⭐-fix-1 precedent and it did not move the file; 9/09 concluded the constraint was structural — the instrument is only reachable on a day when nothing goes wrong, which is the day nothing forces the calendar.)* Until it exists, Sprint D is measured by `report-readiness-census.ts`, which **predates the sheet import AND the Gateway apply** — so "236 activities" and "1 of 8 KPIs producible" are dead figures and must not be quoted. Live today: **~901 activities · metrics 188 · grants 64 fully populated · stage records 97**. What stays genuinely unknown is what the instrument would answer: **which activities that SHOULD exist do not**. 🔎 **And a concrete example of why the `records_30d`-excluding-backfill column is the whole point:** this doc quotes `introduction_referral` as **1** in some places and **62** in others, and both are right — ~62 records exist (nearly all from the sheet import) while roughly **one** came from the live form. A single count cannot tell capture from history; that is precisely the confusion the instrument removes |
 | Funder-template field trace (gate 3) + population census (gate 4) | data QA / Sprint C gate | ✅ **DONE 8/21, COMMITTED 8/27** (`ca947f0`) — ~150 columns bound, 7 with no field, 5 blocking fixes found |
 | The four grant definitions, precisely stated | Sprint C spec | ✅ **DRAFTED 8/24, COMMITTED 8/27** (`ca947f0`) — `docs/sprints/grant-definitions.md` |
 | **Sprint D — capture completeness, then label correctness** | **Phase 2, the new active sprint** | 🔵 **DEFINED 2026-09-03** (`docs/sprints/sprint-d-capture-completeness.md`). D1 = every activity type has a live source ingesting real records; D2 = every captured activity carries the fields the grant definitions bind to. Instrument first (`capture-coverage.ts`), then the two red cells, then Zoom, then right-object capture |
 | **Report-generation engine (regenerate real TC/SBSH reports)** | **Phase 1, Sprint 2** | ⏸️ **SHELVED 2026-09-03 — not cancelled.** Sprint C is fully specified (`docs/sprints/sprint-c-tc-report.md`) and restarts when the Sprint D §3 bar is met. Its grant definitions + TC column bindings stay current and stay authoritative about which fields must be trustworthy |
 | **Sheet import — TC/SBSH workflow spreadsheets as a row source** | Sprint B/C bridge | ✅ **BUILT + RUN 8/31–9/02** (8 commits, `2d761ef`→`41448d0`). Pre-2026 slice imported; then corrected on Zach's review: 53 grant-contract notes relabelled, 11 TA→intake promotions, 0 creates, 247 noop. Exposed **two engine defects**: the dedup rule blocked the import correcting its own records, and `didPersist` could never accept a multi-select (57 referral records were being rewritten on every run, forever) |
-| Auto meeting logging (Zoom AI Companion → appointment → Activity) | **pulled into Sprint D** | 🔵 **Join key proven; spec advanced 9/03 (UNCOMMITTED, +124 lines).** Every appointment carries its OWN distinct Zoom meeting id in `address` (110 distinct across 110); `zoom_meeting_id` is **15/15** on TA. Scope narrowed: **the GHL appointment list is the driver, not the Zoom meeting list** — meetings with no appointment are out of scope. Decided: write notes + Attended/No-showed to the appointment FIRST, then ingest. 🔴 **BLOCKED on a Zoom role permission** — "Server-to-Server OAuth" is greyed out for Zach; the Zoom **account owner** must enable `User Management → Roles → Role Settings → Advanced features → "Zoom for developers"` (View + Edit). If the owner won't, §3's per-user OAuth fallback is the fork — and is arguably the better answer to "anyone on the team" anyway |
+| Auto meeting logging (Zoom AI Companion → appointment → Activity) | **pulled into Sprint D** | 🟢 **BOTH PROOF GATES PASSED 9/09-9/10 — cleared to build (steps 3 and 4).** Team coverage: 571 summaries / 4 hosts on the S2S admin credential, so the per-user OAuth fork is dead. Attendance is structured (`past_meetings/{uuid}/participants`), not prose. Summaries return discrete fields (`summary_overview`, `next_steps[]`, `summary_doc_url`), so the 5,000-char note cap is no longer the normal case. GHL side: partial PUT preserves omitted fields and `Update Note` edits in place — but **GHL does not auto-noop, the caller must diff**. Scope names are now GRANULAR (`meeting:read:list_summaries:admin` is separate from `meeting:read:summary:admin`); dashboard participants is plan-gated and unusable on Pro. ⬜ Owed: `ZOOM_*` in Vercel + Actions secrets, and one LIVE `toNotify:false` check. Detail in §1b/§4b |
 | Outcome-survey capture + internal dashboards | Phase 3, Sprint 6 | ⬜ Not started |
 
 ---
@@ -632,39 +670,50 @@ and an unchanged resubmit must write **nothing** and create no second stage reco
 > Sprint C is **shelved, not cancelled** — `grant-definitions.md` and the TC column bindings stay current
 > and stay authoritative about which fields have to be trustworthy.
 
-**⭐ THE ONE THING (2026-09-09): BUILD `scripts-ts/capture-coverage.ts` — and the spec below is not the
-constraint, so put it in the calendar.**
+**⭐ THE ONE THING (2026-09-10): the 45-MINUTE version of `capture-coverage.ts`, and run it BEFORE the
+Zoom build lands — because the Zoom build is about to change the very numbers it measures.**
 
-**Ninth session. Yesterday's experiment is now a result worth acting on.** The 9/08 run stopped
-restating the bullet and wrote the exact spec here instead, on the precedent that ⭐ fix 1 moved within
-an hour of becoming an instruction. **The spec sat here for a full working day during which four commits
-landed, and the file still does not exist.** So the constraint is not specification, and one more
-rewording will not fix it. What displaced it was a live company record being silently corrupted, which
-genuinely outranks an instrument — and that is the structural point: **this file only ever gets built on
-a day when nothing goes wrong, and on a day when nothing goes wrong nothing forces it either.**
+**Tenth session, and this run is not rewording the ask an eleventh time.** The record: 9/08 wrote the
+exact spec here on the ⭐-fix-1 precedent and the file did not move; 9/09 concluded the constraint was
+structural (the instrument is only reachable on a day when nothing goes wrong, which is the day nothing
+forces the calendar). Both readings are true and neither helped. **What ten sessions never questioned is
+the spec itself.**
 
-⬜ **The one ask, now four runs old and unanswered: give it a scheduled block.** ~2 hours. Everything
-else in Sprint D is judged by it, and the census standing in for it is blind to 188 of its own records.
+🔎 **The spec was the problem. It is a two-hour job because of the CROSS-PRODUCT:** 7 activity types
+**×** 4 grant definitions, with per-grant bound-field fill that has to be read out of
+`grant-definitions.md`. That is 28 rows and a dependency on another spec — and **D1, the half Sprint D
+is actually named for, needs none of it.** Cut to one row per activity type and it is **7 rows, no
+spec-reading, ~45 minutes**, and it still answers the D1 question completely.
 
-**The spec, unchanged and ready — no thinking owed before starting:**
+**The ⭐ spec, halved — read-only, no writes, no `--apply`:**
 
-> **`scripts-ts/capture-coverage.ts`** — read-only, no writes, no `--apply`.
-> **Output: one row per (activity type × grant definition).** Seven types × four grants.
-> **Columns:**
-> 1. `type` · `grant`
-> 2. `source` — the ingesting source from `activity_routes`, or **`NONE`** (a type with no rule ingests
->    nothing; that is the single most important cell in the table)
-> 3. `wired` vs `built` — is there a live webhook/runner delivering, or only code?
-> 4. `records_30d` — count created in the trailing 30 days, **excluding backfill provenance**. A backfill
->    proves history, not capture.
+> **`scripts-ts/capture-coverage.ts`** — **one row per activity type. Seven rows.**
+> 1. `type`
+> 2. `source` — the ingesting source from `activity_routes`, or **`NONE`**. A type with no rule ingests
+>    nothing; **this is the single most important cell in the table.**
+> 3. `wired` vs `built` — is a live webhook/runner delivering, or does only the code exist?
+> 4. `records_30d` — created in the trailing 30 days, **excluding backfill provenance.** A backfill
+>    proves history, not capture. *(This column is why the doc can quote `introduction_referral` as both
+>    1 and 62 without either being wrong.)*
 > 5. `last_real_ingest` — timestamp of the most recent non-backfill record
-> 6. `bound_fields_fill` — per-field populated/total, **for the fields that grant's definition binds to
->    only** (from `docs/sprints/grant-definitions.md`); a field no funder asks for must not dilute the score
-> 7. `verdict` — 🟢 live+labelled · 🟡 live, fields thin · 🔴 no real capture
+> 6. `verdict` — 🟢 real capture · 🟡 thin · 🔴 none
 >
-> **Acceptance:** it reproduces the four-point bar in `sprint-d-capture-completeness.md` §3 as a table a
-> human can read in one screen, and it must print `workshop_event` as 🔴/`NONE`-sourced rather than as a
-> zero that could be mistaken for "nothing happened this month".
+> **Acceptance:** one screen, and `workshop_event` must print as 🔴 / `NONE`-sourced rather than as a
+> bare zero that reads like "nothing happened this month".
+>
+> **Deferred to D2, as `--by-grant`:** the ×4 grant cross-product and `bound_fields_fill` (per-field
+> populated/total for the fields *that grant's* definition binds to, so a field no funder asks for
+> cannot dilute the score). It is the labelling question, and labelling is the second half of the sprint.
+
+⏱️ **Why before Zoom rather than after:** Zoom just passed both gates and is cleared to build, and it
+is about to add a large volume of appointment-sourced activity. **`records_30d` and `last_real_ingest`
+taken after that ingest cannot tell you what capture looked like before it** — the one measurement that
+makes the Zoom work provable gets destroyed by doing the Zoom work first. Forty-five minutes now buys
+the before-picture; there is no way to recover it later.
+
+⬜ *The scheduled-block ask is retired as the framing, not as the need. If the 7-row version does not
+exist tomorrow either, then the constraint is neither spec nor size and the honest move is to drop it
+from the ⭐ slot and say so, rather than log an eleventh loss.*
 
 **Then the second thing, and it is now a REAL build rather than an env var:** run
 `scripts-ts/scoring-form-setup.ts` (dry-run → apply) to create the **12 missing contact fields** and the
@@ -741,15 +790,14 @@ moved when it stopped being a reminder and became an exact, testable instruction
 | `workshop_event` = **0** | **credentials** — the app's `WIX_API_TOKEN` reads events but attendee PII comes back anonymized; the `wix-ghl` MCP tooling reads the same site with real names and check-in state | **Zach:** add Wix Events attendee/order read permission → phase 6 ships |
 | `introduction_referral` = **1** | **behaviour** — the form at `/` works; nobody opens it. TC col P + KPI 16 (target 35) rest on it | a decision about how referrals get logged, not a build |
 
-**Zach's hands, ~20 min, and nothing moves without them:** (1) the **Wix Events permission**, (2) the
-**door check-in process** — every ENDED Wix event reports 0 attended because the check-in app isn't used
-at the door, so phase 6 built perfectly still reports ~zero against KPI 3's target of 100 — (3)
-**webhook #2**, the last unwired ingest path, and (4) 🆕 **the Zoom "Zoom for developers" role
-privilege**, which only the Zoom **account owner** can grant. ✅ **The fifth item on this list — un-pause
-"Contact Changed" — is DONE and was observed working end to end on 9/08.** If Zach is not the owner, this is a
-one-sentence request to whoever is: *User Management → Roles → Role Settings → Advanced features →
-"Zoom for developers" → View + Edit.* Without it, Server-to-Server OAuth stays greyed out and the Zoom
-thread forks to per-user OAuth.
+**Zach's hands, ~20 min, and nothing moves without them — now down to THREE:** (1) the **Wix Events
+attendee permission**, (2) the **door check-in process** — every ENDED Wix event reports 0 attended
+because the check-in app isn't used at the door, so phase 6 built perfectly still reports ~zero against
+KPI 3's target of 100 — and (3) **webhook #2**, the last unwired ingest path.
+✅ **Two items have come off this list on evidence:** un-pausing "Contact Changed" (done, observed
+end to end 9/08) and the **Zoom "Zoom for developers" role privilege** (granted 9/09 — the S2S app
+exists and both proof gates passed; see the blockers list for the two `ZOOM_*` items that replace it,
+which are secrets-plumbing rather than permissions).
 
 > **Webhook #2, in the shape that actually worked for #3:**
 > `POST https://lrl-grant-reporting.vercel.app/api/form-sync?formId=0d8irJ6Ay6VQFajG06Go` ·
@@ -897,6 +945,32 @@ share both halves of the key.
 ---
 
 ## ⚠️ Drift check (are we working on the right thing?)
+
+- **🟢 2026-09-10 — direction is right and the pace is real. The one flag is a NEW kind: this document
+  now has two authors at once.**
+  **Ten commits on 9/09, tree clean, level with origin — and a live Claude Code session was actively
+  editing `docs/PROJECT_STATE.md` and `docs/sprints/zoom-notes-appointments.md` while this run was in
+  progress** (the tree was clean when the run started and had two modified paths by 08:49). That is new,
+  and it is a direct consequence of a good decision: moving this file **into** the repo on 9/09 put the
+  daily refresh and the live sessions on the same file. Both sets of edits merged cleanly today because
+  they touched different sections, but that was luck. **Convention worth adopting: the maintenance run
+  owns the header, the dashboard, the drift check, the blockers and the doc map; a live session owns the
+  sprint sections it is working in.** This run stopped editing the repo the moment it saw the dirty tree.
+  🔎 **The 9/09 test, answered: does `scripts-ts/capture-coverage.ts` exist? No. Ten for ten.**
+  **Why this is 🟢 and not 🟡 despite that:** the work that displaced it is **the same D1 capture
+  question the instrument measures**, and it is the biggest capture win available. Zoom passed both
+  proof gates on real numbers — **571 summaries in 30 days across four hosts, of which Alex alone has
+  228 largely-intake meetings**, against **15** TA activities in GHL. That is the same 271-vs-15 wound
+  the TC sheet exposed on 8/31, and Zoom is the fix for the live half of it. A Zach-only credential
+  would have returned nothing for Alex's 228; the gate caught that before a build depended on it.
+  **The genuine finding of this run is about the spec, not the calendar.** Nine previous entries argued
+  attention and scheduling. None asked why a read-only script needs two hours — and the answer is the
+  7×4 cross-product plus a dependency on `grant-definitions.md`, none of which D1 requires. **Cut to 7
+  rows it is a 45-minute job**, and there is now a reason to do it *today* rather than someday: the Zoom
+  ingest is about to change `records_30d`, and the before-picture is not recoverable afterwards.
+  **The test for the next run:** does `scripts-ts/capture-coverage.ts` exist? If it does not, the
+  correct move is to stop giving it the ⭐ slot and say plainly that it has been outranked ten times by
+  work that was better, which at that point is a fact about the sprint's priorities and not a lapse.
 
 - **🟡 2026-09-09 — the stall broke, the work was right, and the ⭐ still lost. The finding is that the
   intervention was tested and failed.**
@@ -1063,6 +1137,25 @@ share both halves of the key.
 ## Blockers & open decisions
 
 **Immediate**
+- **⬜ NEW 2026-09-10 — `ZOOM_*` are in `.env.local` ONLY. They must also be in Vercel AND GitHub
+  Actions secrets** before anything Zoom-related runs deployed or nightly. Four vars:
+  `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN`. **The
+  stale-`WIX_API_TOKEN` trap has already bitten this project twice** — a secret that exists in one of
+  the three places and not the others fails only in the place nobody is watching.
+- **⬜ NEW 2026-09-10 — one LIVE appointment must be watched before any Zoom backfill.** The 9/10 probe
+  proved GHL's partial PUT is safe in a sandbox, but **the sandbox has none of LRL's real automations**,
+  so nothing measured yet shows that `toNotify:false` actually suppresses them. Watch one real
+  appointment for a webhook delivery and a `change_log` row. 🔴 **And GHL does NOT auto-noop an
+  unchanged status** — a byte-identical re-PUT moved `dateUpdated`, so **the caller must diff** or the
+  nightly churns every Zoom-linked appointment every night. Same lesson as `writeRecordFields`, new
+  endpoint.
+- **⬜ NEW 2026-09-10, process — two authors on this file at once.** It moved into the repo on 9/09,
+  which was right, and the side effect is that the daily maintenance refresh and live Claude Code
+  sessions now edit the same document. Today both landed cleanly only because they touched different
+  sections. **Proposed split, needs no decision unless it is wrong:** the maintenance run owns the
+  header, sprint dashboard, drift check, blockers and doc map; a live session owns the sprint narrative
+  sections it is working in. A live session that rewrites the header should expect the next run to
+  reconcile rather than preserve it.
 - **⬜ NEW 2026-09-09 — read the suppression rows, then decide about review items.** The convergence
   guard now logs every suppressed write as its own `applied: false` change-log row (`ad9cbeb`); before
   that a suppression and "nothing happened" were indistinguishable, which is why Aiden's company sat
@@ -1155,10 +1248,12 @@ share both halves of the key.
   and confirm **run #6 is green**. Also measured, and it matters for the Zoom design: GitHub defers every
   scheduled run here by **~4–4.5 hours**, so a Zoom step on the nightly will not see a 9am meeting until
   the next day. Relative order survives; the "= 5:15am EDT" comments are fiction.
-- **🆕 Zoom is blocked on a ROLE PERMISSION, not on money or feasibility.** Server-to-Server OAuth is
-  greyed out in Zach's Zoom developer portal because it needs account owner / admin / the **"Zoom for
-  developers"** role privilege. Only the **account owner** can grant it, and Zoom's own forums report that
-  existing admins still can't see Role Settings. **First question: who owns LRL's Zoom account?**
+- **✅ Zoom is NO LONGER BLOCKED — both proof gates passed 9/09-9/10.** The role permission was granted,
+  the S2S app exists, and the team-coverage assertion returned **571 summaries across 4 hosts**. Two
+  things that will trip a re-read of the old notes: Zoom scope names are **granular** now (the classic
+  `meeting:read:admin` / `report:read:admin` are gone from the picker, and **listing** summaries is a
+  separate scope from **reading** one), and the dashboard participants endpoint is **plan-gated**, not
+  scope-gated — it grants and then refuses on Pro. Detail in `zoom-notes-appointments.md` §1b/§4b.
 - **Report-critical activity families — RE-STATE THESE, most of the old figures are dead:** metrics
   **188** (was 0 on 9/02 — 1 live snapshot + 187 from the Gateway backfill across 7 real periods) · grant
   headline fields ✅ (`award_amount` 64/64, `activity_date` 64/64 repaired) · `workshop_event` **0**
@@ -1192,7 +1287,7 @@ share both halves of the key.
   turned out writable after six weeks of being wrongly refused, so don't trust the label.
 - **BusinessStageTracking object** migration: 20 disabled mapping rows + the re-scoring automation should move
   to a dedicated custom object.
-- **Zoom AI Companion feasibility** — gates the auto-meeting sprint; not yet verified.
+- ~~**Zoom AI Companion feasibility**~~ ✅ **VERIFIED 9/09-9/10** — summaries, team coverage and structured attendance all measured on LRL's own S2S credential; the GHL write side probed in sandbox. The only unverified piece left is whether `toNotify:false` suppresses LIVE automations (one appointment, watched).
 
 **Data hygiene that bites at report time**
 - **27 distinct spellings of `state`** (MI/Michigan/Mi/mi = 780 MI companies, 90 null) · **69 addresses holding
@@ -1290,8 +1385,21 @@ share both halves of the key.
   (9/03: archived `_backup_uncommitted_20260901-162029/` → `_archive/2026-09-03/`; deleted 2 `.DS_Store`;
   nothing pruned). ⚠️ The backup's `sheet-import-run.ts` **differs** from the committed copy — it is the
   9/01 pre-correction snapshot, superseded by `e910292`/`41448d0`. `_now.ts` was byte-identical.
-  **9/09:** `_archive/` at **4.7 MB of the 50 MB cap** (91% free), nothing pruned, and **no OS junk
-  anywhere in the project** for the **sixth** run running.
+  **9/10:** `_archive/` at **5.2 MB of the 50 MB cap** (90% free), nothing pruned, and **no OS junk
+  anywhere in the project** for the **seventh** run running.
+  - ✅ **The nine 2026-09-08 incident artifacts left in `reports/` yesterday as "the current
+    investigation" → `_archive/2026-09-10/reports/`** (600 KB). That investigation closed: the incident
+    was repaired 9/08 and its follow-ups shipped 9/09. `reports/` now holds **exactly the four inputs**
+    (`sheet-rows.json`, `sheet-import-overrides.json`, `gateway-metrics-rows.json`,
+    `grant-fields-census.json`) and nothing else.
+  - 📌 **Two of the nine were CHECKPOINTS, and that is the argument FOR archiving them rather than
+    against.** `stage-score-checkpoint-apply.txt` and `enrich-checkpoint-live-dryrun.jsonl` are read
+    back under `--resume` — and both belong to runs that **completed**. Keeping them means the next
+    `--resume` reads the whole company list as already-done and **silently sweeps nothing**; archiving
+    them means a `--resume` re-processes, which is idempotent. **The direction with no downside is the
+    one to take.** Note the shape: a "done" marker left by a run whose work did not need doing again is
+    the same fault as the poisoned `geocodedAddress` stamp fixed in `17ed375` the day before.
+  *(9/09: `reports/` cleared after five skips → `_archive/2026-09-09/reports/`, 14 artifacts / 692 KB.)*
   - ✅ **`lrl-grant-reporting/reports/` — CLEARED after FIVE consecutive skips** →
     `_archive/2026-09-09/reports/` (14 artifacts, 692 KB; README explains each). The blocker was never
     the folder, it was the dirty tree; `9d50580` committed `stage-dupe-audit.ts` on 9/08 and the backlog

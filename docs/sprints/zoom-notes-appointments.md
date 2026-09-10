@@ -19,25 +19,12 @@ two lists, and the unit of work is one we already have an id for.
 
 ### A — Zach's hands: the Zoom app (~30 min, needs Zoom account admin)
 
-> 🔴 **HIT 2026-09-03: "Server-to-Server OAuth" is GREYED OUT in Zach's developer portal.**
-> This is a **role permission**, not a missing feature and not a billing problem. Creating an S2S app
-> requires being the Zoom **account owner**, an **account admin**, or holding the **"Zoom for
-> developers"** role privilege.
->
-> **The unlock — done by the account OWNER, in the Zoom web portal:**
-> `User Management → Roles → Role Settings → Advanced features → "Zoom for developers"` →
-> tick **both View and Edit**. Then sign out of the Marketplace and back in; the option becomes
-> selectable.
->
-> ⚠️ **Reported repeatedly on Zoom's own forums: users who already hold an admin role still cannot see
-> Roles / Role Settings, and the account OWNER has to make the change.** So the first question is
-> literally *who owns LRL's Zoom account* — if it is not Zach, this is a request to that person, and it
-> is one sentence long.
->
-> **If the owner cannot or will not enable it, this is a design fork, not a delay** — go to the
-> per-user OAuth fallback in §3, which is more setup but is arguably the better answer to "anyone on the
-> team" anyway, since each staffer grants access to their own meetings and it does not depend on the
-> admin summary scopes that Zoom's forums report as missing.
+> ✅ **CLEARED 2026-09-09 — the app exists, the admin credential works, and §0.A step 3 PASSED.**
+> The 9/03 blocker (S2S greyed out, needing the **"Zoom for developers"** role privilege from the account
+> OWNER) is retired. `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` /
+> `ZOOM_WEBHOOK_SECRET_TOKEN` are in `.env.local`.
+> ⬜ Still owed in **Vercel** and **GitHub Actions secrets**.
+> **Measured results are in §1b. Read that before §3 — §3's risk did not materialise.**
 
 1. Zoom Marketplace → **Develop → Build App → Server-to-Server OAuth**. Note **Account ID**, **Client
    ID**, **Client Secret**.
@@ -114,6 +101,84 @@ quick recap, **next steps with owners**, six sectioned summary paragraphs, both 
    read must use the UUID. Joining on the number alone will attach the wrong week's notes to a meeting
    and it will look completely plausible.
 
+## 1b. Measured live 2026-09-09 on the S2S ADMIN credential — the gate is passed
+
+Every number here came from the real app credential, not a Claude-session connector, so it speaks to what
+the deployed app can do.
+
+**Scopes granted (8):** `meeting:read:summary:admin` · `meeting:read:list_summaries:admin` ·
+`meeting:read:list_past_instances:admin` · `meeting:read:past_meeting:admin` · `meeting:read:meeting:admin` ·
+`meeting:read:list_past_participants:admin` · `dashboard:read:list_meeting_participants:admin` (+`:master`).
+
+⚠️ **The classic scope names in §0.A no longer exist in the picker.** `meeting:read:admin` and
+`report:read:admin` are **classic**; new apps get **granular** scopes, one per endpoint. Anyone re-reading
+§0.A will hunt for names that are gone.
+⚠️ **Listing summaries is its OWN scope.** `meeting:read:summary:admin` reads a summary body but the list
+endpoint 400s with `does not contain scopes:[meeting:read:list_summaries:admin]`. Two scopes, not one.
+❌ **`report:read:list_meeting_participants:admin` was NOT available** (needs the Reports role privilege).
+Not needed — the `meeting:read:list_past_participants:admin` variant covers it.
+
+### ✅ 1. TEAM COVERAGE — the assertion in §0.A step 3, PASSED
+`GET /v2/meetings/meeting_summaries?from=2026-08-10&to=2026-09-09`, fully paginated: **571 summaries**
+across 2 pages, hosted by **four** LRL staff.
+
+| Host | Summaries (trailing 30d) |
+|---|---|
+| zach@leanrocketlab.org | 289 |
+| alex@leanrocketlab.org | 228 |
+| sierra@leanrocketlab.org | 53 |
+| ken@leanrocketlab.org | 1 |
+
+**This is the whole design fork, resolved. Build as specified.** Alex's 228 are largely
+*"Zoom Meeting with <name> | Lean Rocket Lab Intake Meeting"* — exactly the grant-reportable appointments
+a Zach-only credential would have silently returned nothing for.
+
+⚠️ **`page_size=300` is the cap, and `total_records` reported 300 on page 1 when the true count was 571.**
+Anything that reads page 1 only under-reports by ~half and looks entirely plausible. Always follow
+`next_page_token`.
+
+### ✅ 2. The full chain works for a NON-ZACH host
+`"Zoom Meeting with Vihar Patel | Lean Rocket Lab Intake Meeting"` (Alex, 9/09, id `94283456971`):
+`past_meetings/{number}/instances` → UUID → `meetings/{uuid}/meeting_summary` → **200**.
+
+### ✅ 3. ATTENDANCE IS STRUCTURED — do NOT parse the prose
+`GET /v2/past_meetings/{uuid}/participants` → **200**, 3 records:
+`Alex Masten <alex@leanrocketlab.org>`, `Vihar Patel <no-email>`, `Vihar Patel <no-email>`.
+
+**This overturns the ⬜ in §2.** The 9/03 finding that participants "did not come back" was measured on the
+Claude-session connector; on the app's own S2S credential the endpoint the adapter's header always assumed
+**does** return real participants. The fragile attendee-footer parse is **abandoned**.
+
+⚠️ Two traps in that payload:
+- **External guests have an empty `user_email`.** So "external" = email absent OR not `@leanrocketlab.org`.
+  Never key off email domain alone — every external attendee would be invisible.
+- **A rejoin produces a duplicate row** (Vihar appears twice). **Dedupe by name before counting**, or a
+  solo host who dropped and rejoined reads as two attendees and scores a false `showed`.
+
+❌ **Dashboard participants is a DEAD END — plan-gated, not scope-gated.**
+`GET /v2/metrics/meetings/{uuid}/participants` returns *"only available for ZMP and Business or higher
+accounts that have enabled the Dashboard feature."* The scope grants fine and the data never comes.
+
+### ✅ 4. The summary is STRUCTURED — §4's truncation rule is largely obsolete
+Discrete fields, not one markdown blob: `summary_overview` · `summary_details` (array) ·
+**`next_steps` (its own array)** · `summary_doc_url` · `summary_title` · `meeting_host_email` ·
+`meeting_uuid` · `meeting_id` · start/end times.
+Vihar/Alex: 8 next steps, 851-char overview, 8 detail sections. Aveek/Zach: 3,240 chars total.
+
+**The GHL note is ASSEMBLED from fields, not sliced out of prose** — `summary_overview` + `next_steps`
+verbatim, then the `summary_doc_url`. The 5,000-char cap stops being the normal case. §6b still applies to
+`summary_details` prose: human context, never a source of structured facts.
+
+### Scope call from Zach, 2026-09-09
+> *"On attendance I mostly care about being able to say yes this meeting happened or no this meeting did
+> not happen so we can mark it correctly in the GHL appointment."*
+
+"Did it happen" is answered by whether a Zoom occurrence exists — `past_instances`, already proven for a
+non-Zach host. Participants are the **upgrade**: they separate "the meeting ran" from "the client was in
+it," and a session where only the host dialled in is not service delivered.
+⚠️ **The three-way rule in §2 still stands and must not collapse into two** — see the table there. Row 3
+(no occurrence → leave the status alone) is the safety rule.
+
 ## 2. The sequence, and why the order is the point
 
 1. Resolve the appointment's `zoom_meeting_id` + date → the Zoom `meeting_uuid` for that occurrence.
@@ -165,7 +230,13 @@ participants, use it and ignore the prose. **If neither yields structured partic
 without attendance** rather than parsing an AI-written sentence into a `noshow` that suppresses a
 funder-reportable activity. Wrong `noshow` = a real meeting silently deleted from the grant count.
 
-## 3. 🔴 THE RISK: it must work for the whole team, and that is the part Zoom may not allow
+## 3. ~~🔴 THE RISK~~ ✅ RESOLVED 2026-09-09: team coverage WORKS on the admin credential
+
+> **Kept for the reasoning; its conclusion is superseded by §1b.** The fear was that the summary admin
+> scopes would be missing from the S2S picker. They were present, they were granted, and the list endpoint
+> returns meetings hosted by Alex, Sierra and Ken as well as Zach. **The per-user OAuth fallback is NOT
+> needed.** What follows is the 9/03 user-token measurement that motivated the worry.
+
 
 **Measured today, and it is exactly the constraint Zach named.** In the same result set:
 
@@ -239,6 +310,59 @@ with `note.id`.
 - **Verify by reading back**, and report `skipped` rather than `applied` if the value did not persist.
   Several GHL fields accept a write, return 200 and store nothing.
 
+## 4b. ✅ §0.C GHL WRITE PROBE — RUN 2026-09-10 IN SANDBOX, all four questions answered
+
+> Run against **SANDBOX - Lean Rocket Lab** (`Dw6bZusRZr3K71z5STe7`). All artifacts deleted afterwards
+> (probe appointment, probe calendar, probe contact).
+
+**Setup trap, budget a few minutes for it:** every calendar in the sandbox snapshot is `isActive:false`
+**and has an empty `teamMembers` array**, so `create-appointment` → `400 Calendar is inactive`, and
+`update-calendar {isActive:true}` → `400 No team member found` (you cannot activate your way out). The
+sandbox has exactly **one** user (`LSSCwaIxE5roQLc6mk1L`) and `search-users` requires `companyId`
+(`eRXQp1ekNvK2YCINcdJg`, from `get-location`). Working path: create a throwaway `personal` calendar with
+that user as its single team member, probe on it, delete it.
+
+### ✅ Notes persist and the note id is stable
+`POST /calendars/appointments/{id}/notes` → **201** with `note.id`; `GET` reads it back verbatim. The
+5,000-char `body` cap is confirmed in the operation schema.
+
+### ✅ `Update Note` edits IN PLACE — the noop path is viable
+`PUT .../notes/{noteId}` → **200**, and a follow-up `GET` returns **exactly one note**, new body, original
+`dateAdded`. §4's plan holds: **store `note.id` in the claims ledger and update it on re-run.** No
+duplicate-note failure mode, provided the id is persisted.
+
+### ✅ THE BIG ONE — a partial PUT does NOT clear omitted fields
+Sent **only** `{appointmentStatus:'showed', toNotify:false}`; read back afterwards:
+
+| Field | Before | After |
+|---|---|---|
+| appointmentStatus | confirmed | **showed** |
+| title | PROBE - Zoom Meeting with… | unchanged |
+| startTime | 2026-09-09T10:00:00-04:00 | unchanged |
+| endTime | 2026-09-09T10:25:00-04:00 | unchanged |
+| address | https://us02web.zoom.us/j/92190173241 | unchanged |
+| calendarId / contactId / assignedUserId | — | unchanged |
+
+**§4's warning is retired: the status writer does not need to echo back the whole appointment.** Send the
+two fields and nothing else. (The API returns BOTH `appointmentStatus` and the misspelled
+`appoinmentStatus` — read the correctly spelled one, but do not be surprised by the twin.)
+
+### 🔴 GHL does NOT no-op an unchanged status — the CALLER must diff
+Re-sent the byte-identical PUT: 200, and **`dateUpdated` moved 12:07:15 → 12:07:25**. This is the
+`writeRecordFields` lesson on a new endpoint: **an unchanged re-delivery still rewrites the record.** The
+status writer must read the appointment first and skip the PUT when `appointmentStatus` already equals the
+target, or the nightly churns every Zoom-linked appointment every night and `noop` is unreachable. Same
+rule for the note body.
+
+### ⬜ What the sandbox could NOT answer
+**Whether `toNotify:false` actually suppresses LRL's LIVE automations.** The sandbox has none of the live
+workflows, so a clean run there proves nothing. The flag was accepted on every call, but the real test is
+**one live appointment, watched for a webhook delivery and a `change_log` row** — done deliberately,
+before any backfill.
+
+**Verdict: §0.D is met except the `toNotify` live check. Build-order steps 3 and 4 are unblocked**, both
+with an explicit read-before-write diff.
+
 ## 5. Where this runs — the app needs its own Zoom credentials
 
 `.env.local` currently holds no `ZOOM_*` anything. The connector used for today's probe is a
@@ -294,9 +418,9 @@ Steps 0–2 are the proof plan in §0; nothing below them starts until §0.D is 
 
 | # | Step | Output |
 |---|---|---|
-| 0 | **Zoom S2S app + the team-coverage assertion** (§0.A) | a yes/no that decides the design — **Zach** |
+| 0 | ✅ **DONE 2026-09-09** — Zoom S2S app + team-coverage assertion (§0.A) | **PASSED** — 4 hosts / 571 summaries, see §1b |
 | 1 | **`zoom-probe.ts`** — read-only coverage, host spread, attendance signal, note length (§0.B) | the four measurements |
-| 2 | **`ghl-appointment-write-probe.ts`** on a throwaway appointment (§0.C) | partial-PUT safety, `toNotify`, `noop` |
+| 2 | ✅ **DONE 2026-09-10** — GHL write probe, run in sandbox (§0.C) | partial-PUT SAFE · note update in place · **no auto-noop, caller must diff** · `toNotify` live check still ⬜ — see §4b |
 | 3 | Note writer: recap + next steps + doc link, idempotent via a stored `note.id` | re-run reports `noop` |
 | 4 | Status writer with `toNotify:false`, diffed and read back, never on absent evidence | never rewrites an unchanged status |
 | 5 | Wire into the nightly **before** the appointment adapter | ordering per §2 |
