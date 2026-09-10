@@ -386,3 +386,37 @@ export const activityRoutes = pgTable(
 );
 
 export type ActivityRouteRow = typeof activityRoutes.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// zoom_appointment_notes — the idempotency ledger for Zoom summary notes.
+//
+// A GHL appointment note is its OWN resource with its own id, and Create APPENDS. Run the writer
+// twice without remembering the id and the client's appointment grows a second identical note,
+// forever — the same shape as the multi-select bug that rewrote 57 referral records every run.
+//
+// The id alone is not enough, though. Measured 2026-09-10 in the sandbox: GHL does NOT no-op an
+// unchanged write — a byte-identical re-PUT still moved `dateUpdated`. So we also keep a hash of
+// the body we last wrote. Same hash means the correct action is to send NOTHING and report noop.
+// A write path that cannot report noop is broken.
+// ---------------------------------------------------------------------------
+
+export const zoomAppointmentNotes = pgTable(
+  'zoom_appointment_notes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    /** The GHL appointment this note lives on. */
+    appointmentId: text('appointment_id').notNull(),
+    /** The GHL note resource id, so a re-run UPDATES instead of appending a second note. */
+    noteId: text('note_id').notNull(),
+    /** The Zoom occurrence the body came from — the number alone is not unique per occurrence. */
+    meetingUuid: text('meeting_uuid'),
+    /** sha256 of the last body we wrote. Equal hash => send nothing, report noop. */
+    bodyHash: text('body_hash').notNull(),
+    writtenAt: timestamp('written_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uq: unique('zoom_appointment_notes_uq').on(t.appointmentId),
+  }),
+);
+
+export type ZoomAppointmentNoteRow = typeof zoomAppointmentNotes.$inferSelect;

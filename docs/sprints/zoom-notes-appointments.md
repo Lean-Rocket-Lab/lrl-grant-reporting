@@ -421,7 +421,7 @@ Steps 0–2 are the proof plan in §0; nothing below them starts until §0.D is 
 | 0 | ✅ **DONE 2026-09-09** — Zoom S2S app + team-coverage assertion (§0.A) | **PASSED** — 4 hosts / 571 summaries, see §1b |
 | 1 | **`zoom-probe.ts`** — read-only coverage, host spread, attendance signal, note length (§0.B) | the four measurements |
 | 2 | ✅ **DONE 2026-09-10** — GHL write probe, run in sandbox (§0.C) | partial-PUT SAFE · note update in place · **no auto-noop, caller must diff** · `toNotify` live check still ⬜ — see §4b |
-| 3 | Note writer: recap + next steps + doc link, idempotent via a stored `note.id` | re-run reports `noop` |
+| 3 | ✅ **COMMITTED 2026-09-10** — note writer (`lib/activities/zoomNotes.ts` + `lib/zoom/*` + `lib/ghl/appointments.ts` + `scripts-ts/zoom-notes-run.ts`) | **24 tests green on macOS, `tsc` clean.** One case failed first and was a bad FAKE, not a bug: it threw a bare `Error` with `.status=404` bolted on, but a real `ZoomClient` throws `ZoomApiError` for every non-OK status, which is exactly what `listPastInstances` narrows its catch to. Fake corrected; the code was right. Ledger table created (`zoom_appointment_notes`, 0 rows). **Dry run `--days 7`: 6 Zoom-linked appointments, occurrence hit rate 6/6 = 100%** (bar was ≥90%) → 5 `would-create` (1,474–1,810 chars, all far inside the 5,000 cap) + 1 `skip:empty-summary`. ⬜ `--apply` still owed, see the note-trigger question in PROJECT_STATE |
 | 4 | Status writer with `toNotify:false`, diffed and read back, never on absent evidence | never rewrites an unchanged status |
 | 5 | Wire into the nightly **before** the appointment adapter | ordering per §2 |
 | 6 | Backfill across the appointments carrying a Zoom id | dry-run → review → apply |
