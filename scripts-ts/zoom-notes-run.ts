@@ -153,6 +153,13 @@ const NO_STATUS = process.argv.includes('--no-status');
     for (const line of noOccurrence.slice(0, 25)) console.log(line);
     if (noOccurrence.length > 25) console.log(`   …and ${noOccurrence.length - 25} more`);
   }
-  if (!APPLY) console.log('\nDRY RUN — no writes made. Re-run with --apply to write.');
+  // "No writes made" was false: flagForReview sits ABOVE the dryRun check in zoomNotes.ts, so a dry
+  // run still records its no-occurrence anomalies. They are deduped on (kind, record_id, subject_id)
+  // so nothing churns, and surfacing them during a review is the point — but a runner that overstates
+  // its own harmlessness is exactly the kind of claim this project does not tolerate elsewhere.
+  if (!APPLY) {
+    console.log('\nDRY RUN — no GHL writes made. Re-run with --apply to write.');
+    if (noOccurrence.length) console.log(`(The ${noOccurrence.length} sync_review row(s) above ARE recorded, dry run or not.)`);
+  }
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });
