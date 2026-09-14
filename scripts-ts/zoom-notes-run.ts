@@ -9,6 +9,12 @@
 //   npx vite-node scripts-ts/zoom-notes-run.ts --from 2026-08-01 --to 2026-09-10 --apply
 //   npx vite-node scripts-ts/zoom-notes-run.ts --appointment <id> --apply   # one record
 //
+// Two writes per appointment, in this order: the NOTE, then the STATUS. Status is `showed` only —
+// `noshow` is never written automatically, because a wrong one pushes the activity into
+// NON_EVENT_STATUSES and silently deletes a funder-reportable meeting. Ambiguous attendance goes to
+// sync_review (kind=zoom-attendance-unclear) for a human. See lib/activities/zoomStatus.ts.
+// `--no-status` writes notes only.
+//
 // Only calendars WITH an appointment routing rule are read, for the same reason the ingest run
 // does it: personal calendars carry vendor and partner calls that are deliberately out of scope,
 // and a client's notes should not be written onto a meeting the grants never see.
@@ -33,6 +39,7 @@ const arg = (name: string): string | undefined => {
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
 const APPLY = process.argv.includes('--apply');
+const NO_STATUS = process.argv.includes('--no-status');
 
 (async () => {
   const { hasZoom } = await import('../lib/zoom/config');
@@ -49,13 +56,40 @@ const APPLY = process.argv.includes('--apply');
   const { listRoutes } = await import('../lib/activities/routes');
   const { listAppointments, getAppointment, APPOINTMENT_SOURCE, zoomMeetingId } = await import('../lib/activities/sources/appointment');
   const { syncZoomNote } = await import('../lib/activities/zoomNotes');
+  const { syncZoomStatus } = await import('../lib/activities/zoomStatus');
 
   const c = ghl();
   const zc = zoom();
 
   const tally: Record<string, number> = {};
+  const statusTally: Record<string, number> = {};
   const bump = (k: string) => { tally[k] = (tally[k] ?? 0) + 1; };
   const noOccurrence: string[] = [];
+
+  /** What the note pass already learned, so the status pass does not re-walk past_instances. */
+  const resolvedFrom = (r: any) => ({
+    meetingUuid: r.meetingUuid ?? null,
+    hasSummary: !['empty-summary', 'no-summary'].includes(r.reason),
+  });
+
+  const runStatus = async (a: any, noteResult: any) => {
+    if (NO_STATUS) return;
+    const s = await syncZoomStatus(a, {
+      client: c,
+      zoomClient: zc,
+      dryRun: !APPLY,
+      resolved: resolvedFrom(noteResult),
+    });
+    const key = s.outcome === 'leave' || s.outcome === 'review' ? `${s.outcome}:${s.reason}` : s.outcome;
+    statusTally[key] = (statusTally[key] ?? 0) + 1;
+    if (s.outcome === 'updated' || s.outcome === 'would-update') {
+      console.log(`    status ${s.outcome.padEnd(12)} ${String(a.title ?? '').slice(0, 40).padEnd(42)} ${s.from} -> ${s.to}  [${(s.clientNames ?? []).join(', ')}]`);
+    }
+    if (s.outcome === 'review') {
+      console.log(`    status review       ${String(a.title ?? '').slice(0, 40).padEnd(42)} ${s.reason} (left as ${s.from})`);
+    }
+    return s;
+  };
 
   const report = (a: any, r: any) => {
     const key = r.outcome === 'skipped' ? `skip:${r.reason}` : r.outcome;
@@ -75,6 +109,8 @@ const APPLY = process.argv.includes('--apply');
     console.log(APPLY ? 'MODE: APPLY\n' : 'MODE: DRY RUN (pass --apply to write)\n');
     const r = await syncZoomNote(a, { client: c, zoomClient: zc, dryRun: !APPLY });
     console.log(JSON.stringify(r, null, 2));
+    const s = await runStatus(a, r);
+    if (s) console.log(JSON.stringify(s, null, 2));
     process.exit(0);
   }
 
@@ -105,12 +141,14 @@ const APPLY = process.argv.includes('--apply');
     for (const a of withZoom) {
       const r = await syncZoomNote(a, { client: c, zoomClient: zc, dryRun: !APPLY });
       report(a, r);
+      await runStatus(a, r);
       // Keep well under the 429 threshold (~0.12s spacing 429s; house rule is >=0.3s).
       await new Promise((res) => setTimeout(res, 320));
     }
   }
 
-  console.log('\nOUTCOMES:', JSON.stringify(tally, null, 1));
+  console.log('\nNOTE OUTCOMES:', JSON.stringify(tally, null, 1));
+  if (!NO_STATUS) console.log('STATUS OUTCOMES:', JSON.stringify(statusTally, null, 1));
   if (noOccurrence.length) {
     console.log(`\n⚠️  ${noOccurrence.length} appointment(s) had NO Zoom occurrence for their meeting id + start time.`);
     console.log('   Status was left alone and each is queued in sync_review (kind=zoom-no-occurrence).');

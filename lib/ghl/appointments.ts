@@ -1,4 +1,4 @@
-// lib/ghl/appointments.ts — the calendar-appointment surface: notes today, status next.
+// lib/ghl/appointments.ts — the calendar-appointment surface: notes and appointment status.
 //
 // Everything here was probed against a throwaway appointment in the LRL sandbox on 2026-09-10 and
 // the results are recorded in docs/sprints/zoom-notes-appointments.md §4b. Two behaviours matter
@@ -90,4 +90,36 @@ export async function updateAppointmentNote(
   });
   const n = data?.note ?? data;
   return { id: String(n.id), body: String(n.body ?? ''), contactId: n.contactId, createdBy: n.createdBy, dateAdded: n.dateAdded };
+}
+
+/**
+ * Set an appointment's status, and nothing else.
+ *
+ * Verified in the sandbox (§4b): sending ONLY these two fields left title, startTime, endTime,
+ * address, calendarId, contactId and assignedUserId untouched, so there is no need to echo the
+ * whole appointment back — and echoing it back would be the more dangerous call.
+ *
+ * `toNotify: false` asks GHL not to fire the appointment's own notifications. ⚠️ It was accepted on
+ * every sandbox call but the sandbox has none of LRL's live workflows, so its effect on the real
+ * location is still UNMEASURED. That is why the caller writes `showed` only — the status a wrongly
+ * suppressed (or wrongly sent) notification cannot turn into a deleted activity.
+ *
+ * 🔴 The caller MUST diff first. GHL does not no-op an unchanged status: a byte-identical re-PUT
+ * moved `dateUpdated` 12:07:15 → 12:07:25. Without a diff the nightly churns every Zoom-linked
+ * appointment every night. (The API returns both `appointmentStatus` and a misspelled
+ * `appoinmentStatus`; read the correctly spelled one.)
+ */
+export async function setAppointmentStatus(
+  appointmentId: string,
+  appointmentStatus: 'showed' | 'noshow' | 'confirmed',
+  client: GhlClient = ghl(),
+): Promise<{ appointmentStatus?: string }> {
+  const data = await client.request<any>({
+    method: 'PUT',
+    path: `/calendars/events/appointments/${appointmentId}`,
+    body: { appointmentStatus, toNotify: false },
+    autoLocation: false,
+  });
+  const a = data?.appointment ?? data?.event ?? data;
+  return { appointmentStatus: a?.appointmentStatus };
 }
