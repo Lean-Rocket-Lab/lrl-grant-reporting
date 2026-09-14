@@ -4,51 +4,80 @@
 > Start every planning chat here. Refreshed daily by the maintenance routine.
 > Companion docs: `PROJECT_ROADMAP.md` (the phase/sprint plan) · `CANONICAL_REPORTING_MODEL.md` (data spec).
 >
-> **Last refreshed:** 2026-09-10 (Thursday).
+> **Last refreshed:** 2026-09-14 (Sunday).
 >
 > ---
-> ## 🔴 HANDOFF TO CLAUDE CODE — 2026-09-10: Zoom note writer is WRITTEN and UNCOMMITTED
+> ## ✅ ZOOM MEETING LOGGING IS LIVE AND RUNNING NIGHTLY — 2026-09-14
 >
-> **Read `docs/sprints/zoom-notes-appointments.md` §1b and §4b first.** Both proof gates passed; the
-> code below is build-order step 3 (notes only — attendance/status is deliberately NOT in this pass,
-> because a wrong `noshow` pushes an activity into `NON_EVENT_STATUSES` and silently deletes a
-> funder-reportable meeting).
+> **Build-order steps 3, 4, 5 and 6 all landed today** (`b94e2ef`, `6891782`, `fc53033`, pushed on
+> top of `73884f7`). Notes AND attendance status are written from Zoom onto GHL appointments, the
+> 180-day backfill is applied, and the nightly runs it before the appointment ingest. Zach ran the
+> workflow by hand on a just-finished meeting and watched it land. **Nothing here is owed.**
 >
-> **Uncommitted, ~1,376 lines, `npx tsc --noEmit` CLEAN, tests NOT YET RUN:**
-> `lib/zoom/{config,errors,client,summaries,noteBody,index}.ts` · `lib/ghl/appointments.ts` ·
-> `lib/activities/zoomNotes.ts` · `scripts-ts/{zoom-notes-run,create-zoom-notes-table}.ts` ·
-> `lib/zoom/__tests__/summaries.test.ts` · `lib/activities/__tests__/zoomNotes.test.ts` ·
-> plus `zoomAppointmentNotes` appended to `lib/db/schema.ts`.
+> **Live today:** 62 notes · 61 statuses · 0 duplicate notes · `change_log` unmoved across ~120
+> writes (no workflow cascade — Zach confirmed no GHL workflow triggers on a note). `ZOOM_*` secrets
+> are in GitHub Actions; the PAT needed the **`workflow` scope** added before the push was allowed.
 >
-> ⚠️ **The tests were never executed.** The Cowork session that wrote them runs on Linux and this
-> repo's `node_modules` is a macOS install (`@rollup/rollup-darwin-arm64`, `@esbuild/darwin-arm64`),
-> so vitest could not load its native binary. `tsc` passes; **treat the 27 test cases as unverified
-> until `npm test` is green on a Mac.** Do not commit before that — the house rule is
-> `tsc --noEmit && vitest run && git commit`, and this repo has already shipped once on a
-> green-looking grep of a red run.
+> **🔴 §2's ATTENDANCE TABLE WAS WRONG, AND IT WAS MEASURED BEFORE A LINE WAS WRITTEN.** Running the
+> spec's rule read-only over all 86 Zoom-linked appointments produced four kinds of bad write. This
+> is the finding to carry — the brief still reads as authoritative:
+> - **The one genuine `confirmed → noshow` was a FALSE POSITIVE, in the direction that deletes data.**
+>   Chad Petosky 9/02: participants list Alex alone, but the meeting has a **1,915-char summary of a
+>   real conversation** — the client dialled in by phone. §2 writes `noshow`, `NON_EVENT_STATUSES`
+>   drops it, and a funder-reportable intake never gets ingested. **1 of 1 candidates was wrong.**
+> - **17 of 18 `noshow` writes landed on appointments a human had marked `cancelled`** — replacing
+>   someone's record of *why* with a guess.
+> - **AI notetaker bots count as clients.** Mohamed Hagras 5/05: the only participant is "Brandon's
+>   Notetaker" — no LRL human, no client — and §2 says `showed`.
+> - **`user_email` is empty for nearly every external**, not just some (§1b understates it), and staff
+>   who join without signing in land on the external side. **The participants endpoint answers "did
+>   anyone besides the host join". It does NOT answer "did the CLIENT join".**
 >
-> **Do this, in order:**
-> 1. `npx vite-node scripts-ts/create-zoom-notes-table.ts` — additive, idempotent
-> 2. `npm test` — fix whatever the 27 cases catch
-> 3. `npx vite-node scripts-ts/zoom-notes-run.ts --days 7` — DRY RUN, writes nothing. The number that
->    matters is the occurrence hit rate: how many Zoom-linked appointments resolve to an occurrence
->    versus `skip:no-occurrence`. The brief's bar is ≥90%.
-> 4. Only then `--apply`, and only after step 5.
-> 5. ⬜ **STILL UNMEASURED and it gates any backfill: does `toNotify:false` actually suppress LRL's
->    LIVE automations?** The 9/10 probe ran in the sandbox, which has none of the live workflows. One
->    live appointment, watched for a webhook delivery and a `change_log` row. The note writer does not
->    send `toNotify` at all (notes have no such flag) — this gates the *status* writer, step 4.
+> **The rule now shipped** (`lib/activities/zoomStatus.ts`, 24 tests pinned by mutation in both
+> directions):
 >
-> **The two design decisions a reviewer should check rather than assume:**
-> - **Noop is a body HASH, not just a note id.** The id prevents duplicate notes; the hash prevents the
->   rewrite, because GHL bumps `dateUpdated` on a byte-identical write (measured). An unchanged body
->   must produce ZERO HTTP calls.
-> - **Every note carries an invisible `<!-- lrl:zoom-summary -->` marker.** With no `DATABASE_URL`, or
->   for an appointment predating the ledger, the writer finds its own note by scanning for that marker
->   instead of appending a second one. A staff-authored note is left alone.
+> | Evidence | Write |
+> |---|---|
+> | already `cancelled` / `noshow` | never touch — a human knows something the API does not |
+> | no Zoom occurrence | leave alone (§2 row 3, the safety rule, unchanged) |
+> | a real summary **OR** a client-side participant | `showed` |
+> | an occurrence and neither | `noshow` + a `sync_review` row to correct from |
 >
-> Detail sections are deliberately not inlined (§6b: the summary misattributes speakers) — only the
-> recap, the next steps, the doc link, and a provenance line.
+> **Zach's call, 9/14, and it overruled an earlier draft that queued the ambiguous ones instead of
+> writing them:** *"I would prefer to review and update later rather than have a queue that don't get
+> set until the team jumps in manually."* A queue nobody drains leaves every unmarked no-show sitting
+> at `confirmed`, which the adapter counts as held — the **exact over-count this feature exists to
+> fix**. Two things make that safe enough: `noshow` makes the adapter **SKIP** ingestion
+> (`appointment.ts:115`), it does **not** delete an activity that already exists; and every `noshow`
+> still files its review row, so the worklist exists without the write waiting on someone reading it.
+> ⚠️ **A summary alone is enough, but so is a participant alone** — 17 of 86 appointments have an
+> occurrence and an EMPTY summary while the participant list shows the client in the room (AI
+> Companion was off, not nobody came). Reading "no summary" as `noshow` on its own would flip those.
+>
+> **⬜ What is genuinely still open, and it is small:**
+> - **`toNotify:false` has never been proven against LRL's live workflows.** 61 status writes produced
+>   no `change_log` cascade, which is real evidence but not proof — a workflow that only sent mail
+>   would leave no trace we can query. The nightly now writes statuses unattended.
+> - **3 stale `sync_review` rows** (`zoom-attendance-unclear`) from the superseded rule; all three
+>   have since been decided. One query to resolve.
+> - **The "Milestone Grant Meeting" calendar is unrouted** — 4 Zoom meetings in 180 days invisible to
+>   both the note writer and activity ingestion. Zach's call, deliberately deferred 9/14.
+> - **6 appointments have no Zoom occurrence at all** (three on 6/03, one bad day) and keep their
+>   status by design. They are queued as `zoom-no-occurrence`.
+>
+> **📌 Two corrections to the brief's own measurements, found by probing rather than reading:**
+> **§1b's "571 summaries in 30 days" is not a 30-day figure** — it is the account's entire summary
+> history (578 today, back to 2025-01-06). Zoom **echoes `from`/`to` back and ignores them**: a
+> one-day window returns the same 300-row page spanning March–September. The team-coverage conclusion
+> (4 hosts, build account-level) is unaffected; the *rate* is overstated ~6×. `listMeetingSummaries`
+> documents range filtering it cannot do — dormant, unused, worth a comment before someone builds on
+> it. And **a dry run writes `sync_review` rows** (`flagForReview` sits above the `dryRun` check in
+> `zoomNotes.ts:146`) while printing "DRY RUN — no writes made". Deduped, so nothing churns, but the
+> claim is false as printed.
+>
+> **Coverage, measured across all 17 calendars / 180 days:** 91 Zoom-linked appointments, **86 on
+> routed calendars**. Non-Zoom addresses are genuinely in-person or phone (the office address, a phone
+> number) — no parser gap, no shared personal-meeting-room problem.
 > ---
 >
 > **✅ THE BEST DAY SINCE THE SHEET IMPORTER — ten commits landed 9/09, 11:57→17:05, tree clean and
@@ -88,11 +117,15 @@
 > the half Sprint D is named for — needs only the 7-row version.** The ⭐ is now that 7-row script; the
 > grant cross-product moves to D2, where it belongs.
 >
-> **✅ ZOOM: BOTH GATES PASSED (9/09 and 9/10). The feature is cleared to build.** Full evidence in
-> `zoom-notes-appointments.md` **§1b** (Zoom) and **§4b** (GHL write probe).
+> **✅ ZOOM: BUILT AND SHIPPED 9/14** — the gates passed 9/09–9/10 and the feature went live four days
+> later; see the handoff block at the top. Full evidence in `zoom-notes-appointments.md` **§1b** (Zoom)
+> and **§4b** (GHL write probe), with the caveat that **§2's attendance table did not survive contact
+> with the data** and §1b's volume figure is wrong — both corrected in the handoff block.
 >
-> - **Team coverage PASSED** on LRL's own S2S admin credential: **571 summaries in 30 days across FOUR
->   hosts** (zach 289, alex 228, sierra 53, ken 1). The per-user OAuth fork is dead — build account-level.
+> - **Team coverage PASSED** on LRL's own S2S admin credential: **four hosts** (zach, alex, sierra, ken).
+>   The per-user OAuth fork is dead — build account-level. ⚠️ The "571 in 30 days" recorded here was
+>   **the account's whole summary history, not a 30-day rate** — Zoom ignores `from`/`to` on that
+>   endpoint (measured 9/14). The four-host conclusion stands; the volume figure does not.
 >   Alex's 228 are largely *"Zoom Meeting with <name> | Lean Rocket Lab Intake Meeting"*, i.e. exactly the
 >   grant-reportable appointments a Zach-only credential would have silently missed.
 > - **Attendance is STRUCTURED after all.** `past_meetings/{uuid}/participants` returns real records; the
@@ -104,10 +137,12 @@
 >   **The caller must diff** (the `writeRecordFields` lesson, new endpoint), or the nightly churns every
 >   Zoom-linked appointment every night.
 >
-> ⬜ **Two things still owed before any backfill:** (1) `ZOOM_*` in **Vercel + GitHub Actions secrets**
-> (they are in `.env.local` only); (2) **one live appointment** watched for a webhook delivery and a
-> `change_log` row, to prove `toNotify:false` suppresses LRL's real automations — the sandbox has none
-> of them, so nothing measured on 9/10 speaks to that.
+> ✅ **Both pre-backfill items are closed (9/14).** `ZOOM_*` are in GitHub Actions secrets (the PAT
+> needed the `workflow` scope added before the push was allowed). Live appointments were watched: the
+> first note, then the first note+status, then 61 status writes — **`change_log` never moved**, and
+> Zach confirmed no GHL workflow triggers on a note. ⬜ **`toNotify:false` itself remains unproven**:
+> a workflow that only sent mail would leave no trace we can query, and the nightly now writes
+> statuses unattended.
 >
 > *(The `CLIENT_LINK_SECRET` blocker was voided 9/09 — the app-hosted client page was scrapped 9/08 in
 > favour of a GHL-hosted scoring form, and the app now has **zero public routes**. The reasoning lives
@@ -263,7 +298,7 @@ is an engineering problem, and the unbuilt GHL Scoring Form. **Zoom's role-permi
 | **Sprint D — capture completeness, then label correctness** | **Phase 2, the new active sprint** | 🔵 **DEFINED 2026-09-03** (`docs/sprints/sprint-d-capture-completeness.md`). D1 = every activity type has a live source ingesting real records; D2 = every captured activity carries the fields the grant definitions bind to. Instrument first (`capture-coverage.ts`), then the two red cells, then Zoom, then right-object capture |
 | **Report-generation engine (regenerate real TC/SBSH reports)** | **Phase 1, Sprint 2** | ⏸️ **SHELVED 2026-09-03 — not cancelled.** Sprint C is fully specified (`docs/sprints/sprint-c-tc-report.md`) and restarts when the Sprint D §3 bar is met. Its grant definitions + TC column bindings stay current and stay authoritative about which fields must be trustworthy |
 | **Sheet import — TC/SBSH workflow spreadsheets as a row source** | Sprint B/C bridge | ✅ **BUILT + RUN 8/31–9/02** (8 commits, `2d761ef`→`41448d0`). Pre-2026 slice imported; then corrected on Zach's review: 53 grant-contract notes relabelled, 11 TA→intake promotions, 0 creates, 247 noop. Exposed **two engine defects**: the dedup rule blocked the import correcting its own records, and `didPersist` could never accept a multi-select (57 referral records were being rewritten on every run, forever) |
-| Auto meeting logging (Zoom AI Companion → appointment → Activity) | **pulled into Sprint D** | 🟢 **BOTH PROOF GATES PASSED 9/09-9/10 — cleared to build (steps 3 and 4).** Team coverage: 571 summaries / 4 hosts on the S2S admin credential, so the per-user OAuth fork is dead. Attendance is structured (`past_meetings/{uuid}/participants`), not prose. Summaries return discrete fields (`summary_overview`, `next_steps[]`, `summary_doc_url`), so the 5,000-char note cap is no longer the normal case. GHL side: partial PUT preserves omitted fields and `Update Note` edits in place — but **GHL does not auto-noop, the caller must diff**. Scope names are now GRANULAR (`meeting:read:list_summaries:admin` is separate from `meeting:read:summary:admin`); dashboard participants is plan-gated and unusable on Pro. ⬜ Owed: `ZOOM_*` in Vercel + Actions secrets, and one LIVE `toNotify:false` check. Detail in §1b/§4b |
+| **Auto meeting logging (Zoom AI Companion → appointment notes + attendance status)** | **Sprint D** | ✅ **LIVE AND NIGHTLY 2026-09-14** (`b94e2ef`, `6891782`, `fc53033`). Steps 3–6 in one day, after the two proof gates passed 9/09–9/10. **62 notes · 61 statuses · 0 duplicates · `change_log` unmoved across ~120 writes.** The nightly runs the writer BEFORE the appointment ingest (§2 ordering), so the activity is built from a record that already carries its summary; `continue-on-error: true` deliberately, because notes are an enhancement and **activity ingestion is the backbone** — a Zoom outage must not stop appointments and opportunities ingesting. Idempotent by **body HASH**, not note id: GHL bumps `dateUpdated` on a byte-identical write, so an unchanged summary makes **zero HTTP calls**; a clean night is all `noop`, and `updated` on an appointment nobody touched is the signal that the guard broke (**not** the exit code, which `continue-on-error` keeps green). 🔴 **§2's attendance table was WRONG and it was measured read-only over all 86 appointments before any code was written** — see the handoff block: the single genuine `confirmed → noshow` was a **false positive** (Chad Petosky has a 1,915-char summary; the client was on the phone), 17 of 18 `noshow` writes overwrote a human's `cancelled`, notetaker bots counted as clients, and `user_email` is empty for nearly every external. **The participants endpoint answers "did anyone besides the host join", never "did the CLIENT join".** Shipped rule: human-set → untouched · no occurrence → untouched · **a real summary OR a client-side participant → `showed`** · an occurrence with neither → `noshow` **plus** a `sync_review` row. Zach overruled an earlier draft that queued the ambiguous cases: *"I would prefer to review and update later rather than have a queue that don't get set until the team jumps in manually"* — a queue nobody drains leaves every unmarked no-show counted as held, which is the over-count this feature exists to fix. Safe because `noshow` makes the adapter **SKIP** ingestion (`appointment.ts:115`), it does not delete an existing activity. 24 tests **pinned by mutation in both directions** (drop the summary evidence → 3 fail; refuse to write `noshow` → 2 fail); 720 overall. ⚠️ **`toNotify:false` is still unproven against live workflows** and the nightly now writes statuses unattended — 61 writes produced no cascade, which is evidence, not proof. ⬜ 3 stale `zoom-attendance-unclear` rows to resolve; the unrouted **Milestone Grant Meeting** calendar (4 meetings) is Zach's call |
 | Outcome-survey capture + internal dashboards | Phase 3, Sprint 6 | ⬜ Not started |
 
 ---
@@ -1219,18 +1254,22 @@ share both halves of the key.
   these windows computes the corrected key, finds no claim, and creates a SECOND snapshot for a
   half-year that already has one** — the period is half the idempotency key, which is why the script
   rewrites `source_record_id` and the Postgres claim row, not just `reporting_period`.
-- **⬜ NEW 2026-09-10 — `ZOOM_*` are in `.env.local` ONLY. They must also be in Vercel AND GitHub
-  Actions secrets** before anything Zoom-related runs deployed or nightly. Four vars:
-  `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`, `ZOOM_WEBHOOK_SECRET_TOKEN`. **The
-  stale-`WIX_API_TOKEN` trap has already bitten this project twice** — a secret that exists in one of
-  the three places and not the others fails only in the place nobody is watching.
-- **⬜ NEW 2026-09-10 — one LIVE appointment must be watched before any Zoom backfill.** The 9/10 probe
-  proved GHL's partial PUT is safe in a sandbox, but **the sandbox has none of LRL's real automations**,
-  so nothing measured yet shows that `toNotify:false` actually suppresses them. Watch one real
-  appointment for a webhook delivery and a `change_log` row. 🔴 **And GHL does NOT auto-noop an
-  unchanged status** — a byte-identical re-PUT moved `dateUpdated`, so **the caller must diff** or the
-  nightly churns every Zoom-linked appointment every night. Same lesson as `writeRecordFields`, new
-  endpoint.
+- **✅ CLOSED 2026-09-14 — `ZOOM_*` are in GitHub Actions secrets** (`ZOOM_ACCOUNT_ID`,
+  `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET`; the nightly needs no `ZOOM_WEBHOOK_SECRET_TOKEN`). Zach
+  added them and ran the workflow by hand against a just-finished meeting. ⚠️ **Vercel is still
+  untouched** — nothing deployed calls Zoom today, so this is not a live gap, but it becomes one the
+  moment an API route does. **The stale-`WIX_API_TOKEN` trap has already bitten this project twice.**
+  📌 **New, and it will recur:** pushing a `.github/workflows/` change needs the **`workflow` scope**
+  on the PAT — without it the push is rejected outright, and because the workflow commit sat at the
+  BOTTOM of the stack, the two code commits above it could not go either.
+- **🟡 PARTLY CLOSED 2026-09-14 — the live appointments were watched; `toNotify:false` still is not
+  proven.** Three watched writes (one note, one note+status, then the 61-status backfill) moved
+  `change_log` **not at all**, and Zach confirmed no GHL workflow triggers on a note. That is real
+  evidence and it is not proof: **a workflow that only sent mail would leave no trace we can query**,
+  and the nightly now writes statuses unattended. If a client ever reports an unexpected notification
+  about an old appointment, this is the first place to look. ✅ The diff requirement was BUILT, not
+  just noted — status and note body are both compared before any write, and a re-run of the whole
+  180-day window reports every appointment `noop` with zero HTTP calls.
 - **⬜ NEW 2026-09-10, process — two authors on this file at once.** It moved into the repo on 9/09,
   which was right, and the side effect is that the daily maintenance refresh and live Claude Code
   sessions now edit the same document. Today both landed cleanly only because they touched different
