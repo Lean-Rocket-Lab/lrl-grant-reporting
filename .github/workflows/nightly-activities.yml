@@ -57,6 +57,32 @@ jobs:
           cache: npm
       - run: npm ci
 
+      - name: Zoom AI Companion summaries → appointment notes (apply, live)
+        # FIRST, before the ingest below — §2 of docs/sprints/zoom-notes-appointments.md. The note
+        # lands on the appointment, then the appointment is ingested, so the activity is built from a
+        # record that already carries its summary rather than picking it up a night later.
+        #
+        # continue-on-error: notes are an ENHANCEMENT; activity ingestion is the reporting backbone.
+        # A Zoom outage, an expired credential or a missing secret must never stop appointments and
+        # opportunities from being ingested — and without this flag it would, because the script
+        # exits 2 on absent credentials and a failed step ends the job. Read the step's own status.
+        #
+        # Idempotent: the ledger stores a body HASH, so an unchanged summary makes ZERO HTTP calls.
+        # A clean night prints all `noop`. `updated` on appointments nobody touched means the hash
+        # guard is broken — that is the signal to read, not the exit code.
+        continue-on-error: true
+        run: npx vite-node scripts-ts/zoom-notes-run.ts --days ${{ github.event.inputs.days || '7' }} --apply
+        env:
+          GHL_TARGET: live
+          GHL_MAX_RPS: 3
+          GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
+          GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
+          GHL_CUSTOM_OBJECT_ID: ${{ secrets.GHL_CUSTOM_OBJECT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ZOOM_ACCOUNT_ID: ${{ secrets.ZOOM_ACCOUNT_ID }}
+          ZOOM_CLIENT_ID: ${{ secrets.ZOOM_CLIENT_ID }}
+          ZOOM_CLIENT_SECRET: ${{ secrets.ZOOM_CLIENT_SECRET }}
+
       - name: Appointments → Intake / TA (apply, live)
         # A 7-day window, not one: it has to cover a webhook that was down for a few days, and a
         # re-ingested appointment is a noop. Only calendars WITH a routing rule are read, so
