@@ -34,47 +34,65 @@ describe('decideAppointmentStatus — never overwrite a human', () => {
   });
 });
 
-describe('decideAppointmentStatus — never writes noshow', () => {
-  it('THE BUG: a summary with only the host is NOT a no-show — it goes to review', () => {
-    // 2026-09-02 Chad Petosky. Participants: Alex alone. But the meeting has a 1,915-char summary,
-    // so it demonstrably RAN. §2's rule wrote `noshow` here and NON_EVENT_STATUSES would then have
-    // deleted a funder-reportable intake. 1 of 1 genuine candidates was a false positive.
+describe('decideAppointmentStatus — a summary alone proves the meeting happened', () => {
+  it("THE BUG: a summary with only the host is `showed`, not a no-show", () => {
+    // 2026-09-02 Chad Petosky. Participants: Alex alone — but a 1,915-char summary of a real
+    // conversation, so the client dialled in by phone. §2's rule wrote `noshow` here and
+    // NON_EVENT_STATUSES would then have kept a funder-reportable intake from ever being ingested.
     const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', hasSummary: true, participants: [p('Alex Masten', 'alex@leanrocketlab.org')] });
-    expect(d.action).toBe('review');
-    expect(d.reason).toBe('host-only-with-summary');
-    expect(d.status).toBeUndefined();
+    expect(d.action).toBe('write');
+    expect(d.status).toBe('showed');
+    expect(d.reason).toBe('summary-exists');
   });
 
-  it('host alone with no summary is ambiguous, not a no-show', () => {
+  it('a summary outranks even an empty participant list', () => {
+    const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', hasSummary: true, participants: [] });
+    expect(d.status).toBe('showed');
+  });
+
+  it('NEVER writes noshow while any positive evidence exists', () => {
+    const withEvidence = [
+      { ...base, currentStatus: 'confirmed', hasSummary: true, participants: [] },
+      { ...base, currentStatus: 'confirmed', hasSummary: true, participants: [p('Alex Masten', 'alex@leanrocketlab.org')] },
+      { ...base, currentStatus: 'confirmed', hasSummary: false, participants: [p('Jojo Rodriguez')] },
+      { ...base, currentStatus: 'confirmed', hasSummary: true, participants: [p("Brandon's Notetaker")] },
+    ];
+    for (const c of withEvidence) expect(decideAppointmentStatus(c).status).not.toBe('noshow');
+  });
+});
+
+describe('decideAppointmentStatus — noshow when there is no evidence at all', () => {
+  it('host alone with no summary is a no-show', () => {
+    // Zach, 2026-09-14: "If there is not really a zoom summary then we should mark it as noshow...
+    // I would prefer to review and update later rather than have a queue that don't get set."
     const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', hasSummary: false, participants: [p('Alex Masten', 'alex@leanrocketlab.org')] });
-    expect(d.action).toBe('review');
+    expect(d.action).toBe('write');
+    expect(d.status).toBe('noshow');
     expect(d.reason).toBe('host-only-no-summary');
   });
 
-  it('no participant records at all goes to review, never to a status', () => {
-    const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', participants: [] });
-    expect(d.action).toBe('review');
+  it('no participant records and no summary is a no-show', () => {
+    const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', hasSummary: false, participants: [] });
+    expect(d.action).toBe('write');
+    expect(d.status).toBe('noshow');
     expect(d.reason).toBe('no-participants');
   });
 
-  it('no decision in any branch can ever produce noshow', () => {
-    const cases = [
-      { ...base, currentStatus: 'confirmed', participants: [] },
-      { ...base, currentStatus: 'confirmed', hasSummary: false, participants: [p('Alex Masten', 'alex@leanrocketlab.org')] },
-      { ...base, currentStatus: 'confirmed', hasOccurrence: false },
-      { ...base, currentStatus: 'cancelled' },
-      { ...base, currentStatus: 'confirmed', participants: [p("Brandon's Notetaker")] },
-    ];
-    for (const c of cases) expect(decideAppointmentStatus(c).status).not.toBe('noshow');
+  it('is a NOOP when the status is already noshow', () => {
+    const d = decideAppointmentStatus({ ...base, currentStatus: 'noshow', hasSummary: false, participants: [] });
+    expect(d.action).toBe('leave');
+    // NON_EVENT_STATUSES catches this first: a human may have set it, and either way it is correct.
+    expect(d.reason).toBe('human-set');
   });
 });
 
 describe('decideAppointmentStatus — bots are not clients', () => {
   it('THE BUG: a notetaker bot alone does not mean the client showed', () => {
     // 2026-05-05 Mohamed Hagras — the ONLY participant was "Brandon's Notetaker". No LRL human,
-    // no client. §2's rule wrote `showed`.
-    const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', participants: [p("Brandon's Notetaker")] });
-    expect(d.action).toBe('review');
+    // no client, no summary. §2's rule wrote `showed`; a bot in an empty room is a no-show.
+    const d = decideAppointmentStatus({ ...base, currentStatus: 'confirmed', hasSummary: false, participants: [p("Brandon's Notetaker")] });
+    expect(d.status).not.toBe('showed');
+    expect(d.status).toBe('noshow');
   });
 
   it('staff plus their bot is still nobody from the client side', () => {
@@ -82,9 +100,10 @@ describe('decideAppointmentStatus — bots are not clients', () => {
     const d = decideAppointmentStatus({
       ...base,
       currentStatus: 'confirmed',
+      hasSummary: false,
       participants: [p('Brandon Bartel', 'brandon@leanrocketlab.org'), p("Brandon's Notetaker")],
     });
-    expect(d.action).toBe('review');
+    expect(d.status).not.toBe('showed');
   });
 
   it('recognises the common assistant names', () => {

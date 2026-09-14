@@ -9,11 +9,11 @@
 //   npx vite-node scripts-ts/zoom-notes-run.ts --from 2026-08-01 --to 2026-09-10 --apply
 //   npx vite-node scripts-ts/zoom-notes-run.ts --appointment <id> --apply   # one record
 //
-// Two writes per appointment, in this order: the NOTE, then the STATUS. Status is `showed` only —
-// `noshow` is never written automatically, because a wrong one pushes the activity into
-// NON_EVENT_STATUSES and silently deletes a funder-reportable meeting. Ambiguous attendance goes to
-// sync_review (kind=zoom-attendance-unclear) for a human. See lib/activities/zoomStatus.ts.
-// `--no-status` writes notes only.
+// Two writes per appointment, in this order: the NOTE, then the STATUS. A real summary OR a
+// client-side participant means `showed`; an occurrence with neither means `noshow`, and every
+// `noshow` also files a sync_review row (kind=zoom-attendance-noshow) to correct from later. An
+// appointment a human marked cancelled/noshow is never touched, and no Zoom occurrence at all
+// leaves the status alone. See lib/activities/zoomStatus.ts. `--no-status` writes notes only.
 //
 // Only calendars WITH an appointment routing rule are read, for the same reason the ingest run
 // does it: personal calendars carry vendor and partner calls that are deliberately out of scope,
@@ -80,13 +80,10 @@ const NO_STATUS = process.argv.includes('--no-status');
       dryRun: !APPLY,
       resolved: resolvedFrom(noteResult),
     });
-    const key = s.outcome === 'leave' || s.outcome === 'review' ? `${s.outcome}:${s.reason}` : s.outcome;
+    const key = s.outcome === 'leave' ? `leave:${s.reason}` : s.outcome === 'updated' || s.outcome === 'would-update' ? `${s.outcome}:${s.to}` : s.outcome;
     statusTally[key] = (statusTally[key] ?? 0) + 1;
     if (s.outcome === 'updated' || s.outcome === 'would-update') {
       console.log(`    status ${s.outcome.padEnd(12)} ${String(a.title ?? '').slice(0, 40).padEnd(42)} ${s.from} -> ${s.to}  [${(s.clientNames ?? []).join(', ')}]`);
-    }
-    if (s.outcome === 'review') {
-      console.log(`    status review       ${String(a.title ?? '').slice(0, 40).padEnd(42)} ${s.reason} (left as ${s.from})`);
     }
     return s;
   };

@@ -29,14 +29,19 @@
 // So: the participants endpoint reliably answers "did anyone besides the host join". It does NOT
 // reliably answer "did the CLIENT join" — which is the question the status field is asked to hold.
 //
-// THE RULE THIS FILE IMPLEMENTS, and the asymmetry behind it: a wrong `showed` is a bad row
-// someone can spot. A wrong `noshow` is a row that never appears. So positive evidence writes, and
-// absence of evidence goes to a human:
+// THE RULE THIS FILE IMPLEMENTS. An earlier draft of it never wrote `noshow` at all, on the
+// asymmetry that a wrong `showed` is a row someone can spot while a wrong `noshow` is a row that
+// never appears. Zach overruled that on 2026-09-14 — a review queue nobody drains leaves every
+// unmarked no-show counted as a held meeting, which is the over-count this feature exists to fix.
+// Two things make that a smaller risk than the brief's "silently deletes" framing suggests:
+// `noshow` makes the adapter SKIP ingestion (appointment.ts:115), it does not delete an activity
+// that already exists; and a review row is still filed for every `noshow`, so the worklist exists
+// without the write waiting on someone reading it.
 //
-//   already cancelled / noshow      → never touch (human-set)
-//   no Zoom occurrence              → leave alone (§2 row 3, unchanged — the safety rule)
-//   a client-side participant       → `showed`
-//   nobody but host/staff/bots      → sync_review, NEVER an automatic `noshow`
+//   already cancelled / noshow          → never touch (human-set)
+//   no Zoom occurrence                  → leave alone (§2 row 3, unchanged — the safety rule)
+//   a real summary OR a client present  → `showed`
+//   an occurrence and neither of those  → `noshow`, AND a review row to correct from later
 //
 // GHL does not no-op an unchanged status — a byte-identical re-PUT moved `dateUpdated` (§4b) — so
 // the current status is diffed before every write, and an appointment already `showed` costs zero
@@ -92,16 +97,15 @@ export function isClientSide(
   return true;
 }
 
-export type StatusAction = 'write' | 'leave' | 'review';
+export type StatusAction = 'write' | 'leave';
 
 export type StatusLeaveReason = 'human-set' | 'no-occurrence' | 'already-correct' | 'not-yet-held' | 'no-zoom-id';
-export type StatusReviewReason = 'host-only-with-summary' | 'host-only-no-summary' | 'no-participants';
+export type StatusWriteReason = 'client-present' | 'summary-exists' | 'host-only-no-summary' | 'no-participants';
 
 export interface StatusDecision {
   action: StatusAction;
-  /** Only ever 'showed'. `noshow` is never written automatically — see the header. */
-  status?: 'showed';
-  reason: StatusLeaveReason | StatusReviewReason | 'client-present';
+  status?: 'showed' | 'noshow';
+  reason: StatusLeaveReason | StatusWriteReason;
   /** The participants that counted as client-side, for the run report and the review row. */
   clientNames?: string[];
 }
@@ -128,26 +132,43 @@ export function decideAppointmentStatus(ev: AttendanceEvidence): StatusDecision 
   if (NON_EVENT_STATUSES.has(current)) return { action: 'leave', reason: 'human-set' };
 
   // §2 row 3, unsoftened: no occurrence can mean no-show, or a phone call, or an in-person
-  // meeting, or someone's personal room. Absence of evidence is not evidence of absence.
+  // meeting, or someone's personal room. Absence of evidence is not evidence of absence, and
+  // unlike every case below there is no Zoom record here to review later against.
   if (!ev.hasOccurrence) return { action: 'leave', reason: 'no-occurrence' };
-
-  if (!ev.participants.length) return { action: 'review', reason: 'no-participants' };
 
   const clients = ev.participants.filter((p) => isClientSide(p, { hostName: ev.hostName, staffNames: ev.staffNames }));
 
-  if (clients.length) {
+  // EITHER kind of positive evidence is enough, and the two catch different failures.
+  //
+  //   A summary proves the meeting RAN even when the participant list does not show the client —
+  //   Chad Petosky 2026-09-02 has a 1,915-char summary of a real conversation with Alex listed
+  //   alone, because the client dialled in by phone. Zach's call, 2026-09-14: "if there is ever a
+  //   real meeting summary that tells us a meeting happened, even if another participant didn't
+  //   show up on zoom, we should mark it as showed."
+  //
+  //   A client in the participant list proves it just as well when AI Companion was off and no
+  //   summary exists. 17 of 86 appointments have an occurrence and an empty summary; marking those
+  //   `noshow` on the absence of a summary alone would contradict a participant record showing the
+  //   client in the room. Summary-absence means the AI did not write, not that nobody came.
+  if (ev.hasSummary || clients.length) {
     const names = clients.map((p) => p.name);
+    const reason = ev.hasSummary ? (clients.length ? 'client-present' : 'summary-exists') : 'client-present';
     if (current === 'showed') return { action: 'leave', reason: 'already-correct', clientNames: names };
-    return { action: 'write', status: 'showed', reason: 'client-present', clientNames: names };
+    return { action: 'write', status: 'showed', reason, clientNames: names };
   }
 
-  // Host, staff and bots only. This is where §2 wrote `noshow`; we ask a human instead. The two
-  // reasons are kept apart because they mean different things: a substantive summary proves the
-  // meeting RAN (so a `noshow` would be plainly wrong), while no summary is genuinely ambiguous.
-  return { action: 'review', reason: ev.hasSummary ? 'host-only-with-summary' : 'host-only-no-summary' };
+  // An occurrence, no summary, and nobody in the room but the host, staff or a notetaker bot.
+  // §2 wrote `noshow` here; an earlier draft of this file queued it for a human instead. Zach
+  // overruled that on 2026-09-14 and the reasoning is operational, not technical: "I would prefer
+  // to review and update later rather than have a queue that don't get set until the team jumps in
+  // manually." A queue nobody drains leaves every one of these counted as a held meeting, which is
+  // the over-count this feature exists to fix. So it writes — AND still files a review row, so the
+  // list to correct from exists without gating the write on someone reading it.
+  if (current === 'noshow') return { action: 'leave', reason: 'already-correct' };
+  return { action: 'write', status: 'noshow', reason: ev.participants.length ? 'host-only-no-summary' : 'no-participants' };
 }
 
-export type ZoomStatusOutcome = 'updated' | 'would-update' | 'noop' | 'leave' | 'review';
+export type ZoomStatusOutcome = 'updated' | 'would-update' | 'noop' | 'leave';
 
 export interface ZoomStatusResult {
   appointmentId: string;
@@ -221,33 +242,6 @@ export async function syncZoomStatus(
     staffNames: opts.staffNames,
   });
 
-  if (decision.action === 'review') {
-    // Queued rather than written. subjectId is the meeting number so the unique index bumps
-    // seen_count instead of inserting a fresh row every night (the zoom-no-occurrence lesson).
-    if (!opts.dryRun) {
-      await flagForReview({
-        kind: 'zoom-attendance-unclear',
-        objectType: 'appointment',
-        recordId: appointment.id,
-        recordLabel: appointment.title,
-        subjectType: 'zoom-meeting',
-        subjectId: meetingNumber,
-        reason:
-          decision.reason === 'host-only-with-summary'
-            ? 'Zoom summary exists but no client-side participant was identified — the meeting ran, so this is NOT a no-show. Mark it by hand.'
-            : decision.reason === 'no-participants'
-              ? 'Zoom returned no participant records for this occurrence'
-              : 'Only the host, LRL staff or a notetaker bot appeared in this meeting',
-        detail: {
-          startTime: appointment.startTime,
-          currentStatus: current,
-          participants: participants.map((p) => ({ name: p.name, email: p.email || null })),
-        },
-      });
-    }
-    return { ...base, outcome: 'review', reason: decision.reason, from: current, meetingUuid };
-  }
-
   if (decision.action === 'leave') {
     return { ...base, outcome: decision.reason === 'already-correct' ? 'noop' : 'leave', reason: decision.reason, from: current, clientNames: decision.clientNames, meetingUuid };
   }
@@ -256,5 +250,30 @@ export async function syncZoomStatus(
   if (opts.dryRun) return { ...common, outcome: 'would-update' };
 
   await setAppointmentStatus(appointment.id, decision.status!, client);
+
+  // Every `noshow` files its own review row. The status is set either way — that was the point of
+  // overruling the queue — but `noshow` is the direction that keeps an activity from ever being
+  // ingested, so the list to correct from has to exist. subjectId is the meeting number so the
+  // unique index bumps seen_count instead of inserting a fresh row every night.
+  if (decision.status === 'noshow') {
+    await flagForReview({
+      kind: 'zoom-attendance-noshow',
+      objectType: 'appointment',
+      recordId: appointment.id,
+      recordLabel: appointment.title,
+      subjectType: 'zoom-meeting',
+      subjectId: meetingNumber,
+      reason:
+        decision.reason === 'no-participants'
+          ? 'Marked noshow: a Zoom occurrence exists but returned no participants and no summary'
+          : 'Marked noshow: only the host, LRL staff or a notetaker bot appeared, and no summary was written',
+      detail: {
+        startTime: appointment.startTime,
+        previousStatus: current,
+        participants: participants.map((p) => ({ name: p.name, email: p.email || null })),
+      },
+    });
+  }
+
   return { ...common, outcome: 'updated' };
 }
