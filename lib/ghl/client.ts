@@ -128,9 +128,19 @@ export class GhlClient {
 
         if (res.ok) return parsed as T;
 
-        // Non-2xx. Retry on 429/5xx and GHL's transient "Request Timeout" 400s (its contacts
-        // list times out server-side ~30s under deep pagination), respecting Retry-After.
-        const isTransientTimeout = res.status === 400 && /request timeout/i.test(text);
+        // Non-2xx. Retry on 429/5xx and on GHL's transient server-side timeouts, respecting
+        // Retry-After.
+        //
+        // GHL reports a gateway timeout under TWO different statuses and neither is 408/504:
+        //   400 {"message":"Request Timeout"}      — contacts list, ~30s under deep pagination
+        //   401 {"statusCode":401,"message":"Command timed out"}  — object record reads
+        // The 401 shape cost a nightly on 2026-09-15: a single timed-out company read was
+        // classified as a credential failure and took the whole `nightly-score` run down with it.
+        // MATCH THE MESSAGE, NOT THE STATUS. A 401 whose body says it timed out is a timeout;
+        // a real GHL auth failure says "Invalid JWT" / "Unauthorized" and still falls through
+        // to the throw below on the first attempt, as it should.
+        const isTransientTimeout =
+          (res.status === 400 || res.status === 401) && /request timeout|command timed out/i.test(text);
         if ((res.status === 429 || res.status >= 500 || isTransientTimeout) && attempt < maxAttempts) {
           const retryAfter = Number(res.headers.get('retry-after'));
           const wait = Number.isFinite(retryAfter) && retryAfter > 0

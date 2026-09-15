@@ -91,6 +91,28 @@ describe('GhlClient.request', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  // 2026-09-15: GHL answers a server-side gateway timeout on object record reads with 401, not 408.
+  // One of these took down the whole nightly-score run, misread as a bad ANTHROPIC_API_KEY.
+  it("retries GHL's transient 401 'Command timed out' then succeeds", async () => {
+    fetchMock
+      .mockResolvedValueOnce(res(401, { statusCode: 401, message: 'Command timed out' }))
+      .mockResolvedValueOnce(res(200, { record: { id: 'b1' } }));
+    const client = new GhlClient(config);
+    const out = await client.request<any>({ path: '/objects/business/records/b1', maxAttempts: 3 });
+    expect(out.record.id).toBe('b1');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('still throws immediately on a REAL 401 that is not a timeout', async () => {
+    fetchMock.mockResolvedValueOnce(res(401, { statusCode: 401, message: 'Invalid JWT' }));
+    const client = new GhlClient(config);
+    await expect(client.request({ path: '/x', maxAttempts: 3 })).rejects.toMatchObject({
+      status: 401,
+      name: 'GhlApiError',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('treats an absolute URL (nextPageUrl) as-is without re-injecting baseUrl', async () => {
     fetchMock.mockResolvedValueOnce(res(200, { contacts: [] }));
     const client = new GhlClient(config);

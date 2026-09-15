@@ -310,7 +310,22 @@ function agree(prior: number | null | undefined, next: number | null | undefined
   // success is not a backstop — it is a light that is wired to always be on.
   //
   // Three levels, cheapest signal first:
-  const authFailures = rows.filter((r) => /authentication_error|\b401\b|invalid x-api-key|API key is invalid/i.test(String(r.error ?? '')));
+  //
+  // …and then, on 2026-09-15, this check overcorrected. It matched a bare `\b401\b` anywhere in the
+  // error string, so a 401 from ANY api was reported as a bad ANTHROPIC_API_KEY. GHL returns
+  // `401: Command timed out` for a server-side gateway timeout (see lib/ghl/client.ts), one company
+  // hit it, and the run announced a credential failure for a key it had not called once that night
+  // (scored=0). A detector that names the wrong knob is the same failure as the one it replaced.
+  //
+  // So: match the shapes Anthropic actually emits, and never claim a credential fault for an error
+  // string that names another service.
+  const isAnthropicAuthError = (raw: unknown): boolean => {
+    const e = String(raw ?? '');
+    if (!e) return false;
+    if (/^GHL |^Wix |^Zoom |^Square /i.test(e)) return false;
+    return /authentication_error|invalid x-api-key|API key is invalid|\b401\b/i.test(e);
+  };
+  const authFailures = rows.filter((r) => isAnthropicAuthError(r.error));
   if (authFailures.length) {
     // One 401 means every 401: a bad credential is systemic, not per-company. Name the secret, because
     // the whole cost of this incident was the eight nights spent not knowing which knob was wrong.
@@ -323,14 +338,21 @@ function agree(prior: number | null | undefined, next: number | null | undefined
     );
     process.exit(1);
   }
-  if (stats.error > 0 && stats.scored === 0) {
+  //
+  // "Nothing scored" is NOT the same as "nothing succeeded" on a gated night. The fingerprint gate
+  // is doing its job when every in-scope company comes back `unchanged` — that is the normal, cheap,
+  // zero-credit night, and `scored` sits at 0 for days at a time (09-12 through 09-15 all scored 0).
+  // Counting a gated skip as a non-success turned one timed-out record on 2026-09-15 into a red
+  // nightly. Gated skips are completed work; only a run that got through NO company at all is total.
+  const succeeded = stats.scored + (gated ? stats.skippedUnchanged : 0);
+  if (stats.error > 0 && succeeded === 0) {
     // Nothing succeeded and something failed. Whatever the cause, this is not a clean night.
     console.error(`\n❌ ${stats.error} error(s) and NOTHING scored — failing so this is visible rather than green.`);
     process.exit(1);
   }
   if (stats.error > 0) {
     // Partial failure. Loud, but a run that scored most of its work is not a failed run.
-    console.error(`\n⚠️  ${stats.error} compan(ies) errored (${stats.scored} scored). See the CSV — the rationale column carries each error.`);
+    console.error(`\n⚠️  ${stats.error} compan(ies) errored (${stats.scored} scored${gated ? `, ${stats.skippedUnchanged} unchanged` : ''}). See the CSV — the rationale column carries each error.`);
   }
   process.exit(0);
 })().catch((e) => { console.error('STAGE SCORE RUN FAILED:', e?.stack ?? e); process.exit(2); });
