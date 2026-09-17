@@ -44,11 +44,18 @@ on:
     # MOVED FROM 09:15 UTC (2026-09-17, Zach): a morning run writes up YESTERDAY, so a meeting at
     # 2:30pm was not in GHL until the following day. After the work day it catches the same day.
     #
-    # ⚠️ GitHub schedules are BEST EFFORT and this repo has measured deferrals of ~4–4.5h, so treat
-    # 6:10pm as "that evening", not as a clock. The 7-day window is what makes that harmless — a run
-    # that slips past midnight still picks the day up, and everything already written is a `noop`.
-    # If a meeting needs to be in GHL *now*, run the workflow by hand with days=1.
+    # ⚠️ GitHub schedules are BEST EFFORT and this repo has MEASURED the delay twice: ~4–4.5h on
+    # 9/04–9/05, and 4h59m on 9/16 (scheduled 09:15 UTC, the opportunity-ingest step's change_log
+    # rows land at 14:14). So treat 6:10pm as the EARLIEST it runs, not as a clock. Even a 5h slip
+    # puts it at 11pm ET, which is still overnight — that is the whole point of the evening slot.
     - cron: '10 22 * * *'
+    # BACKSTOP, 04:10 UTC = 12:10am EDT. Not for timing — for the case GitHub DROPS a scheduled run
+    # entirely, which it does under heavy load and does silently. A dropped evening run would mean
+    # nobody sees yesterday's notes when they check in the morning, which is the exact failure this
+    # schedule exists to prevent. Deferred by the same ~5h this still lands ~5am ET, before anyone
+    # looks. The 7-day window means it re-covers the same day the evening run did, and both passes
+    # are idempotent — if the evening run worked, this one writes NOTHING and reports all `noop`.
+    - cron: '10 4 * * *'
   workflow_dispatch:
     inputs:
       days:
