@@ -181,6 +181,48 @@
 
 ---
 
+## ✅ SHIPPED 2026-09-17 — the Readiness Map, live and embeddable in a GHL dashboard
+
+`/readiness-map` (in the module nav) and `/readiness-map?widget=1` (no chrome, for a GHL dashboard
+Embed widget). Deployed to production: `6d8eeb1`. **Not on the ⭐ queue** — Zach asked for it directly.
+
+**The embed needed NO new public route, and that is the reusable finding.** After the 09-08 decision
+that the app has zero public routes, the reflex is that anything GHL frames must be public. It does
+not: `next.config.mjs` already sends `frame-ancestors` for the GHL domains, and
+`lib/security/staffSession.ts` already sets the staff cookie `SameSite=None; Secure` — both put there
+for the embedded case. A staff viewer who is not signed in gets the normal `/staff-login` redirect
+*inside the widget*, signs in once, and holds the cookie for 30 days. Verified live: unauthenticated
+API = 401, unauthenticated page = 307 to staff-login, authenticated = 200 with data.
+
+**What it draws:** every scored company on its readiness stage against the stage it held at intake.
+Three views (stage map / movement / intake vs today), hover tooltip with all four scales, filters for
+scale, business path and rescored-only, plus a table view.
+
+**Data layer:** `lib/stage/portfolio.ts` folds the `custom_objects.business_stage` history that
+`writeStageRecord` has been appending all along. Each scale resolves **independently** — the scorer
+routes on business model, so a company can hold a Churchill-only record and a TRL/MRL/CRL-only
+record, and taking the scales off the first and last records wholesale reports "no history" for
+exactly the companies that switched paths. 7 unit tests plus a parity test that reproduces a
+hand-checked extraction over all 127 live records, 79 companies, four scales.
+
+⚡ **`pageLimit: 500` on `/objects/{key}/records/search` works and is 3x faster than 100.** Measured:
+one page of 500 companies returns in 4.1s, the same wall time as a page of 100 — the cost is per
+REQUEST, not per record. The first deploy paged at 100 and took **30s**; at 500 it is **8s cold,
+0.3s warm** behind a 10-minute per-lambda cache with in-flight coalescing. This applies to every
+full-object sweep in the codebase, not just this one.
+
+🔴 **READ THE CHART BEFORE SHOWING IT TO A FUNDER. The movement in it is mostly scorer variance.**
+Of the 34 companies scored more than once, **31 were rescored within five days** of the first score,
+on unchanged intake answers. Net across all four scales: **4 up, 66 flat, 9 down**. GigNGo moved
+MRL 1 → 9 in five days; 419rides went Churchill 4 → 1; Abba Industries 4 → 2. That is the scorer
+disagreeing with itself, not growth. **A rescore on unchanged inputs is now the cheapest available
+regression test for `lib/stage/scoreCompany.ts`** — run it over the 45 never-rescored companies and
+diff before trusting any advancement number.
+
+⚠️ **Data hygiene the map made visible:** `Abba Industries (dba Abba Ginger D...)` exists as **two
+company records**, both scored; `Lean Rocket Lab` itself, `Zach's Consulting Company`,
+`Aidens Consulting Company` and `Don't have one yet` all sit in the scored client set.
+
 ## North Star
 LRL's team logs each client interaction **once** in GHL. The system enriches it, routes it to every grant it
 qualifies for, and **generates each funder's report/portal numbers on demand** — killing manual data entry,
