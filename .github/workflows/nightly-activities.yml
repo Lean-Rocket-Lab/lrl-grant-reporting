@@ -6,9 +6,10 @@ name: Nightly activity ingest (backstop)
 # workflow after a storm of failures, and a paused workflow is silent. Reporting data cannot depend
 # on a delivery mechanism that can switch itself off.
 #
-# 09:15 UTC — after nightly-reconcile (07:00), which keeps contact↔company links in step. Activity
-# ingestion resolves a company through `contact.businessId`, so running after reconcile means a
-# newly-linked contact is resolvable on the same night rather than the next one.
+# 22:10 UTC (6:10pm EDT) — the end of the work day, so a meeting held this afternoon is written up
+# THIS evening instead of tomorrow morning. Still comfortably after nightly-reconcile (07:00), which
+# keeps contact↔company links in step: activity ingestion resolves a company through
+# `contact.businessId`, so a contact reconciled this morning is resolvable tonight.
 #
 # Both steps are idempotent: identity is (source, source_record_id) and `upsertActivity` diffs before
 # writing, so a clean night reports all `noop` and writes nothing. Re-running is always safe.
@@ -36,8 +37,18 @@ name: Nightly activity ingest (backstop)
 
 on:
   schedule:
-    # 09:15 UTC = 5:15am EDT / 4:15am EST. Cron is UTC.
-    - cron: '15 9 * * *'
+    # 22:10 UTC = 6:10pm EDT. Cron is UTC and does NOT follow DST, so this becomes 5:10pm EST in
+    # November. That drift is deliberate rather than worth chasing: the look-back window is 7 DAYS,
+    # so the exact firing time only decides how soon a meeting is written up, never whether it is.
+    #
+    # MOVED FROM 09:15 UTC (2026-09-17, Zach): a morning run writes up YESTERDAY, so a meeting at
+    # 2:30pm was not in GHL until the following day. After the work day it catches the same day.
+    #
+    # ⚠️ GitHub schedules are BEST EFFORT and this repo has measured deferrals of ~4–4.5h, so treat
+    # 6:10pm as "that evening", not as a clock. The 7-day window is what makes that harmless — a run
+    # that slips past midnight still picks the day up, and everything already written is a `noop`.
+    # If a meeting needs to be in GHL *now*, run the workflow by hand with days=1.
+    - cron: '10 22 * * *'
   workflow_dispatch:
     inputs:
       days:
