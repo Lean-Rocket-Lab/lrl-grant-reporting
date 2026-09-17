@@ -61,16 +61,28 @@ const str = (v: unknown): string | null => {
 };
 
 /**
+ * Page size for the object search.
+ *
+ * ⚠️ **500 is above the documented 100 and was MEASURED, not assumed** (2026-09-17): one page of 500
+ * companies returns in 4.1s, the same wall time as a page of 100, because the cost is per REQUEST and
+ * not per record. At 100 the company sweep is 10 sequential round trips and the endpoint takes ~25s;
+ * at 500 it is 2 and takes ~8s. That is the whole difference between a dashboard tile that paints and
+ * one that looks broken. If GHL ever caps this back to 100 the loop below still terminates correctly
+ * (a short page ends it), it just gets slow again — so a sudden slowdown here is the thing to check.
+ */
+const SEARCH_PAGE = 500;
+
+/**
  * Page a whole custom object through `POST /objects/{key}/records/search`.
  *
  * Paging is by `searchAfter` echoed off the last record, NOT by incrementing `page` — the page
  * parameter is pinned at 1 and the cursor does the work. Getting this wrong returns the first
- * 100 records forever, which looks like a small dataset rather than a bug.
+ * page forever, which looks like a small dataset rather than a bug.
  */
 async function searchAllRecords(objectKey: string, client: GhlClient): Promise<any[]> {
   const out: any[] = [];
   let searchAfter: unknown[] | undefined;
-  // Bounded so a cursor that stops advancing cannot spin forever; 100 pages is 10k records.
+  // Bounded so a cursor that stops advancing cannot spin forever.
   for (let i = 0; i < 100; i++) {
     const data = await client.request<any>({
       method: 'POST',
@@ -79,7 +91,7 @@ async function searchAllRecords(objectKey: string, client: GhlClient): Promise<a
       body: {
         locationId: client.locationId,
         page: 1,
-        pageLimit: 100,
+        pageLimit: SEARCH_PAGE,
         ...(searchAfter ? { searchAfter } : {}),
       },
     });
@@ -87,7 +99,7 @@ async function searchAllRecords(objectKey: string, client: GhlClient): Promise<a
     if (batch.length === 0) break;
     out.push(...batch);
     const next = batch[batch.length - 1]?.searchAfter;
-    if (batch.length < 100 || !next) break;
+    if (batch.length < SEARCH_PAGE || !next) break;
     searchAfter = next;
   }
   return out;
