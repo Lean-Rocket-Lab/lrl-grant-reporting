@@ -219,6 +219,18 @@ disagreeing with itself, not growth. **A rescore on unchanged inputs is now the 
 regression test for `lib/stage/scoreCompany.ts`** — run it over the 45 never-rescored companies and
 diff before trusting any advancement number.
 
+**Branded on the LRL brand kit 2026-09-17** (`24211ae`, light treatment, Zach's call): logo lockup
+(`public/brand/`, width set and height auto from the true 350x91 ratio — never both), gold `#F8B82D`
+rule and accents, charcoal `#4A4A4A` headings, Montserrat + Open Sans. **The brand's one-accent rule
+forced a real chart decision and made the chart better:** the four per-scale hues went away (only one
+scale is ever on screen, so the second hue carried nothing), and movement is no longer colour-coded at
+all. Inside a single-accent palette the three movement states can only be gold, grey and red, and that
+trio **fails the normal-vision separation floor** (gold vs grey ΔE 14.5, gold vs red 7.2 deutan) —
+secondary encoding does not excuse that one. Direction is carried by **position**: the tail runs from
+the intake stage to today, so a tail pointing left means the company moved up. Red is kept for
+regressions only and never appears alone. Note gold is 1.77:1 on white — fine for a bar, far too weak
+for a 5px dot, so marks use a deeper gold `#A97D14` (3.73:1) and fills use brand gold.
+
 ⚠️ **Data hygiene the map made visible:** `Abba Industries (dba Abba Ginger D...)` exists as **two
 company records**, both scored; `Lean Rocket Lab` itself, `Zach's Consulting Company`,
 `Aidens Consulting Company` and `Don't have one yet` all sit in the scored client set.
