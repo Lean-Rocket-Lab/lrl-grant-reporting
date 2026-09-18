@@ -15,6 +15,21 @@
 // appointment a human marked cancelled/noshow is never touched, and no Zoom occurrence at all
 // leaves the status alone. See lib/activities/zoomStatus.ts. `--no-status` writes notes only.
 //
+// ── THE TWO SCOPES ARE DELIBERATELY DIFFERENT (Zach, 2026-09-18) ───────────────────────────────
+//
+//   NOTES   -> EVERY calendar with a Zoom link. "That way we get notes in the CRM but we don't
+//              cause an issue for the reporting side." A note is a paragraph a human reads on an
+//              appointment; it cannot enter a grant count, so there is nothing to protect.
+//   STATUS  -> routed calendars ONLY, by default. `showed`/`noshow` is the field the appointment
+//              adapter reads, so it stays where the reporting rules already are. `--status-all`
+//              lifts that if it is ever wanted.
+//
+// 🔴 WHY THIS CANNOT LEAK INTO REPORTING, which is the thing actually worth checking: activity
+// creation is NOT gated by which calendars this script reads. `ingestAppointment` resolves the
+// route itself and returns `no-route` for any calendar without a rule (appointment.ts:105), and
+// appointment-ingest-run.ts separately never even fetches an unrouted calendar. Two independent
+// gates, neither of them here. Widening this script cannot create a single activity record.
+//
 // Only calendars WITH an appointment routing rule are read, for the same reason the ingest run
 // does it: personal calendars carry vendor and partner calls that are deliberately out of scope,
 // and a client's notes should not be written onto a meeting the grants never see.
@@ -40,6 +55,10 @@ const arg = (name: string): string | undefined => {
 };
 const APPLY = process.argv.includes('--apply');
 const NO_STATUS = process.argv.includes('--no-status');
+// Restores the pre-2026-09-18 behaviour: notes only on calendars that have a routing rule.
+const ROUTED_ONLY = process.argv.includes('--routed-only');
+// Lets the status writer follow the notes onto unrouted calendars. Off by default on purpose.
+const STATUS_ALL = process.argv.includes('--status-all');
 
 (async () => {
   const { hasZoom } = await import('../lib/zoom/config');
@@ -63,6 +82,7 @@ const NO_STATUS = process.argv.includes('--no-status');
 
   const tally: Record<string, number> = {};
   const statusTally: Record<string, number> = {};
+  const bumpStatus = (k: string) => { statusTally[k] = (statusTally[k] ?? 0) + 1; };
   const bump = (k: string) => { tally[k] = (tally[k] ?? 0) + 1; };
   const noOccurrence: string[] = [];
 
@@ -72,8 +92,9 @@ const NO_STATUS = process.argv.includes('--no-status');
     hasSummary: !['empty-summary', 'no-summary'].includes(r.reason),
   });
 
-  const runStatus = async (a: any, noteResult: any) => {
+  const runStatus = async (a: any, noteResult: any, calendarIsRouted = true) => {
     if (NO_STATUS) return;
+    if (!calendarIsRouted && !STATUS_ALL) { bumpStatus('skip:unrouted-calendar'); return; }
     const s = await syncZoomStatus(a, {
       client: c,
       zoomClient: zc,
@@ -81,7 +102,7 @@ const NO_STATUS = process.argv.includes('--no-status');
       resolved: resolvedFrom(noteResult),
     });
     const key = s.outcome === 'leave' ? `leave:${s.reason}` : s.outcome === 'updated' || s.outcome === 'would-update' ? `${s.outcome}:${s.to}` : s.outcome;
-    statusTally[key] = (statusTally[key] ?? 0) + 1;
+    bumpStatus(key);
     if (s.outcome === 'updated' || s.outcome === 'would-update') {
       console.log(`    status ${s.outcome.padEnd(12)} ${String(a.title ?? '').slice(0, 40).padEnd(42)} ${s.from} -> ${s.to}  [${(s.clientNames ?? []).join(', ')}]`);
     }
@@ -118,27 +139,39 @@ const NO_STATUS = process.argv.includes('--no-status');
     : new Date(to.getTime() - (Number(days ?? 7) || 7) * 86400000);
 
   const routes = (await listRoutes({ force: true })).filter((r) => r.source === APPOINTMENT_SOURCE && r.enabled);
-  if (!routes.length) {
+  // No routing rules is fatal only when the STATUS writer is the point. Notes do not need a rule
+  // any more, so a location with none still gets its summaries written.
+  if (!routes.length && (ROUTED_ONLY || (!NO_STATUS && !STATUS_ALL))) {
     console.log('No appointment routing rules configured — nothing to annotate.');
     process.exit(0);
   }
 
   const cals: any[] = (await c.request<any>({ path: '/calendars/', params: { locationId: c.locationId } })).calendars ?? [];
-  const routed = cals.filter((k) =>
-    routes.some((r) => (r.matchKind === 'calendar' && r.matchId === k.id) || (r.matchKind === 'calendar_group' && r.matchId === k.groupId)),
-  );
+  const isRouted = (k: any) =>
+    routes.some((r) => (r.matchKind === 'calendar' && r.matchId === k.id) || (r.matchKind === 'calendar_group' && r.matchId === k.groupId));
+  const routed = cals.filter(isRouted);
+  // Notes go everywhere by default; --routed-only restores the old, narrower sweep.
+  const sweep = ROUTED_ONLY ? routed : cals;
 
-  console.log(`target=${process.env.GHL_TARGET}  window=${from.toISOString().slice(0, 10)}..${to.toISOString().slice(0, 10)}  calendars=${routed.length}/${cals.length}`);
+  console.log(`target=${process.env.GHL_TARGET}  window=${from.toISOString().slice(0, 10)}..${to.toISOString().slice(0, 10)}`);
+  console.log(`notes on ${sweep.length}/${cals.length} calendars · status on ${STATUS_ALL ? sweep.length : routed.length} (routed: ${routed.length})`);
   console.log(APPLY ? 'MODE: APPLY\n' : 'MODE: DRY RUN (pass --apply to write)\n');
 
-  for (const k of routed) {
+  for (const k of sweep) {
     const appts = await listAppointments(k.id, from.getTime(), to.getTime(), c);
     const withZoom = appts.filter((a) => zoomMeetingId(a.address));
-    console.log(`${String(k.name).slice(0, 44).padEnd(46)} ${String(withZoom.length).padStart(4)}/${String(appts.length).padStart(4)} with a Zoom link`);
+    const routedHere = isRouted(k);
+    // An unrouted calendar is worth naming rather than printing as if it were the same: its notes
+    // are written, its statuses are not, and nothing on it becomes an activity.
+    if (withZoom.length || routedHere) {
+      console.log(
+        `${String(k.name).slice(0, 44).padEnd(46)} ${String(withZoom.length).padStart(4)}/${String(appts.length).padStart(4)} with a Zoom link${routedHere ? '' : '   [notes only — no routing rule]'}`,
+      );
+    }
     for (const a of withZoom) {
       const r = await syncZoomNote(a, { client: c, zoomClient: zc, dryRun: !APPLY });
       report(a, r);
-      await runStatus(a, r);
+      await runStatus(a, r, routedHere);
       // Keep well under the 429 threshold (~0.12s spacing 429s; house rule is >=0.3s).
       await new Promise((res) => setTimeout(res, 320));
     }
