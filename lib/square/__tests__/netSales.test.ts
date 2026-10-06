@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { computeNetSales, monthRange, parseMonthArg, previousMonth } from '../netSales';
 
 describe('computeNetSales', () => {
-  it('nets tax/tips/service off the returns-adjusted total; gross = net + discounts', () => {
+  it('nets line-item gross less discounts, excludes gift cards, counts OPEN orders', () => {
     const orders = [
       {
+        state: 'COMPLETED',
         net_amounts: {
           total_money: { amount: 1100, currency: 'USD' }, // $11.00 after $2 discount + $1 tax
           tax_money: { amount: 100, currency: 'USD' },
@@ -17,6 +18,8 @@ describe('computeNetSales', () => {
         ],
       },
       {
+        // A DoorDash-shaped ticket: never marked COMPLETED. Must still be counted.
+        state: 'OPEN',
         net_amounts: {
           total_money: { amount: 525, currency: 'USD' },
           tax_money: { amount: 25, currency: 'USD' },
@@ -26,16 +29,34 @@ describe('computeNetSales', () => {
         },
         line_items: [{ gross_sales_money: { amount: 450 }, total_discount_money: { amount: 0 } }],
       },
+      {
+        // Gift card sale: deferred revenue, excluded from net sales entirely.
+        state: 'COMPLETED',
+        net_amounts: {
+          total_money: { amount: 2500, currency: 'USD' },
+          tax_money: { amount: 0, currency: 'USD' },
+          tip_money: { amount: 0, currency: 'USD' },
+          service_charge_money: { amount: 0, currency: 'USD' },
+          discount_money: { amount: 0, currency: 'USD' },
+        },
+        line_items: [
+          { name: 'Gift Card', item_type: 'GIFT_CARD', gross_sales_money: { amount: 2500 }, total_discount_money: { amount: 0 } },
+        ],
+      },
     ];
     const s = computeNetSales(orders, 'Test 2026');
-    // order1 net = 1100-100 = 1000; order2 net = 525-25-50 = 450 -> 1450c = $14.50
+    // (1200-200) + (450-0) = 1450c = $14.50; the $25 gift card is excluded
     expect(s.netSales).toBe(14.5);
+    expect(s.grossSales).toBe(16.5); // 1200 + 450
     expect(s.discounts).toBe(2.0);
-    expect(s.grossSales).toBe(16.5); // net 14.50 + discounts 2.00
+    expect(s.giftCardSales).toBe(25.0);
     expect(s.tax).toBe(1.25);
     expect(s.tips).toBe(0.5);
-    expect(s.orderCount).toBe(2);
-    expect(s.lineItemNetSalesCheck).toBe(14.5); // (1200-200)+(450-0) = 1450c
+    expect(s.orderCount).toBe(3);
+    expect(s.completedOrderCount).toBe(2);
+    expect(s.openOrderCount).toBe(1);
+    // old formula: (1100-100) + (525-25-50) + 2500 = 3950c -> high by the gift card
+    expect(s.orderLevelCheck).toBe(39.5);
     expect(s.currency).toBe('USD');
   });
 
@@ -43,6 +64,8 @@ describe('computeNetSales', () => {
     const s = computeNetSales([], 'Empty');
     expect(s.netSales).toBe(0);
     expect(s.orderCount).toBe(0);
+    expect(s.openOrderCount).toBe(0);
+    expect(s.giftCardSales).toBe(0);
   });
 });
 

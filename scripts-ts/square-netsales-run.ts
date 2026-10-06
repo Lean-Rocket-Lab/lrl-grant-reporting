@@ -41,7 +41,7 @@ async function main() {
   const apply = has('apply');
   const yes = has('yes');
   const force = has('force');
-  const timestampField = (arg('timestamp') as TimestampField) || 'closed_at';
+  const timestampField = (arg('timestamp') as TimestampField) || 'created_at';
 
   const monthArg = arg('month');
   const { year, month } = monthArg ? parseMonthArg(monthArg) : previousMonth(tz);
@@ -61,12 +61,13 @@ async function main() {
 
   const { summary } = await getMonthlyNetSales(year, month, { timezone: tz, timestampField });
   const c = summary.currency;
-  console.log(`\nOrders (COMPLETED): ${summary.orderCount}`);
+  console.log(`\nOrders: ${summary.orderCount} (COMPLETED ${summary.completedOrderCount}, OPEN ${summary.openOrderCount})`);
   console.log(`  Gross sales        ${money(summary.grossSales, c)}`);
   console.log(`  - Discounts/comps  ${money(summary.discounts, c)}`);
   console.log(`  ----------------------------`);
   console.log(`  NET SALES          ${money(summary.netSales, c)}  <- opportunity value`);
-  console.log(`  (line-item check)  ${money(summary.lineItemNetSalesCheck, c)}`);
+  console.log(`  (gift cards excl.) ${money(summary.giftCardSales, c)}  deferred revenue, not counted`);
+  console.log(`  (order-level check) ${money(summary.orderLevelCheck, c)}  pre-2026-10-06 formula, expect it high by ~the gift card total`);
   console.log(`  memo: tax ${money(summary.tax, c)} · tips ${money(summary.tips, c)} · svc ${money(summary.serviceCharges, c)} · total collected ${money(summary.totalCollected, c)}`);
 
   const client = ghl();
