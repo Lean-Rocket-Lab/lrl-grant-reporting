@@ -145,3 +145,16 @@ describe('sendOnce ledger', () => {
     expect(claim).not.toHaveBeenCalled();
   });
 });
+
+describe('gaClientIdFromLinker', () => {
+  it('decodes the client id from a real GHL event-registration URL (measured 2026-10-19)', async () => {
+    const { gaClientIdFromLinker } = await import('../ga4');
+    const url = 'https://go.leanrocketlab.org/events/event-details/6abe9a286cd68ec6b867a922?_gl=1*z0dswc*_ga*MTY4Mjg3ODg4Ni4xNzkyNDM4MTE4*_ga_4WMKNE5XEZ*czE3OTI0NDAwNDckbzIkZzEkdDE3OTI0NDE3MDYkajYwJGwxJGgxNTk1MDMyNTcx&utm_source=test&utm_medium=email&utm_campaign=event_test';
+    expect(gaClientIdFromLinker(url)).toBe('1682878886.1792438118');
+  });
+  it('returns null without a linker param', async () => {
+    const { gaClientIdFromLinker } = await import('../ga4');
+    expect(gaClientIdFromLinker('https://go.leanrocketlab.org/x?utm_source=a')).toBeNull();
+    expect(gaClientIdFromLinker(null)).toBeNull();
+  });
+});

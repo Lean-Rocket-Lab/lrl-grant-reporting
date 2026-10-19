@@ -53,6 +53,31 @@ export function normalizeGaClientId(raw: string | null | undefined): string | nu
   return BARE_ID.test(v) ? v : null;
 }
 
+/**
+ * The GA client id carried in a cross-domain linker param (`_gl`), e.g.
+ * `_gl=1*z0dswc*_ga*MTY4Mjg3ODg4Ni4xNzkyNDM4MTE4*_ga_4WMK…*…` → `1682878886.1792438118`.
+ *
+ * WHY (measured 2026-10-19): GHL Events pages run no GA tag, so GHL cannot read the `_ga` cookie and
+ * stores `gaClientId: null` on an event registration. But the visitor arrived via a link GA's linker
+ * decorated (the Wix tag is configured for `leanrocketlab.org`), so the landing URL GHL DOES store
+ * carries the client id, base64-encoded after `_ga*`. The linker hash is not checked — we only read
+ * the id, never set a cookie from it.
+ */
+export function gaClientIdFromLinker(url: string | null | undefined): string | null {
+  if (!url) return null;
+  let gl: string | null = null;
+  try { gl = new URL(url).searchParams.get('_gl'); } catch { gl = (String(url).match(/[?&]_gl=([^&#]+)/) ?? [])[1] ?? null; }
+  if (!gl) return null;
+  const parts = decodeURIComponent(gl).split('*');
+  const i = parts.indexOf('_ga');
+  if (i < 0 || !parts[i + 1]) return null;
+  try {
+    const b64 = parts[i + 1].replace(/\./g, '=').replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = Buffer.from(b64, 'base64').toString('utf8');
+    return normalizeGaClientId(decoded);
+  } catch { return null; }
+}
+
 export function ga4Configured(): boolean {
   return Boolean(process.env.GA4_MEASUREMENT_ID && process.env.GA4_API_SECRET);
 }

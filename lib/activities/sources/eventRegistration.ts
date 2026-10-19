@@ -28,7 +28,7 @@ import { GhlClient, ghl } from '../../ghl/client';
 import { getContact } from '../../ghl/contacts';
 import { upsertActivity, type UpsertActivityResult } from '../upsert';
 import type { CreateActivityOptions } from '../create';
-import { sendGa4Event, type Ga4Result } from '../../conversions/ga4';
+import { sendGa4Event, gaClientIdFromLinker, type Ga4Result } from '../../conversions/ga4';
 import { sendLinkedInConversion, liFatIdFromUrl, type LinkedInResult } from '../../conversions/linkedin';
 import { sendOnce } from '../../conversions/ledger';
 
@@ -236,7 +236,9 @@ export async function ingestEventRegistration(
 
   const [ga4, linkedin] = await Promise.all([
     sendOnce('ga4', eventKey, () => sendGa4Event({
-      clientId: attr.gaClientId,
+      // GHL stores null here for event registrations (no GA tag on Events pages); the id survives in
+      // the landing URL's `_gl` linker param, so fall back to that before giving up.
+      clientId: attr.gaClientId || gaClientIdFromLinker(attr.url) || gaClientIdFromLinker(contact.firstAttribution?.url),
       sessionId: attr.gaSessionId,
       name: GA4_EVENT_NAME,
       occurredAt: registeredAt,
