@@ -52,6 +52,23 @@ export function liFatIdFromUrl(url: string | null | undefined): string | null {
   }
 }
 
+/**
+ * LinkedIn-Version candidates, newest first: the env override (if set), then the previous month back
+ * nine months. LinkedIn retires a version ~12 months after release and answers a retired one with
+ * `426 NONEXISTENT_VERSION` (measured 2026-10-19: `202509` was already gone). The current month is
+ * skipped because a month's version is not always published on the 1st.
+ */
+export function linkedInVersionCandidates(now: Date = new Date(), override = process.env.LINKEDIN_API_VERSION): string[] {
+  const out: string[] = [];
+  if (override && /^\d{6}$/.test(override)) out.push(override);
+  for (let back = 1; back <= 9; back++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+    const v = `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 export function buildLinkedInBody(c: LinkedInConversion, conversionId: string) {
   const userIds: Array<{ idType: string; idValue: string }> = [];
   if (c.email) userIds.push({ idType: 'SHA256_EMAIL', idValue: sha256Email(c.email) });
@@ -80,16 +97,22 @@ export async function sendLinkedInConversion(
   // LinkedIn has no validate-only endpoint, so a dry run plans and stops.
   if (opts.dryRun) return { status: 'planned', detail: `would send ${body.conversion} matched on ${(body.user as any).userIds.map((u: any) => u.idType).join(' + ')}` };
   const f = opts.fetchImpl ?? fetch;
-  const res = await f('https://api.linkedin.com/rest/conversionEvents', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'LinkedIn-Version': process.env.LINKEDIN_API_VERSION || '202509',
-      'X-Restli-Protocol-Version': '2.0.0',
-    },
-    body: JSON.stringify(body),
-  });
+  let res: Response | undefined;
+  // Walk newest → older until LinkedIn stops answering 426 (version retired / not yet published).
+  for (const version of linkedInVersionCandidates()) {
+    res = await f('https://api.linkedin.com/rest/conversionEvents', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'LinkedIn-Version': version,
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      body: JSON.stringify(body),
+    });
+    if (res.status !== 426) break;
+  }
+  if (!res) return { status: 'failed', reason: 'http-error', detail: 'no LinkedIn version candidates' };
   if (res.status === 401) return { status: 'failed', reason: 'unauthorized', detail: `401 — token expired or lacks rw_conversions: ${await res.text().catch(() => '')}` };
   if (!res.ok) return { status: 'failed', reason: 'http-error', detail: `${res.status} ${await res.text().catch(() => '')}` };
   return { status: 'sent' };

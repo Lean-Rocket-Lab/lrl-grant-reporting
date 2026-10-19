@@ -158,3 +158,24 @@ describe('gaClientIdFromLinker', () => {
     expect(gaClientIdFromLinker(null)).toBeNull();
   });
 });
+
+describe('LinkedIn version fallback', () => {
+  it('candidates are the override, then the previous nine months', async () => {
+    const { linkedInVersionCandidates } = await import('../linkedin');
+    const c = linkedInVersionCandidates(new Date('2026-10-19T12:00:00Z'), undefined);
+    expect(c[0]).toBe('202609');
+    expect(c).toHaveLength(9);
+    expect(c.at(-1)).toBe('202601');
+    expect(linkedInVersionCandidates(new Date('2026-01-05T00:00:00Z'), '202512')[0]).toBe('202512');
+  });
+  it('retries past a retired version (426) and succeeds', async () => {
+    process.env.LINKEDIN_CAPI_TOKEN = 't'; process.env.LINKEDIN_EVENT_CONVERSION_ID = '1';
+    const f = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 426, text: async () => 'NONEXISTENT_VERSION' })
+      .mockResolvedValueOnce({ ok: true, status: 201, text: async () => '' }) as any;
+    const r = await sendLinkedInConversion({ email: 'a@b.c', eventId: 'e' }, { fetchImpl: f });
+    expect(r.status).toBe('sent');
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(f.mock.calls[0][1].headers['LinkedIn-Version']).not.toBe(f.mock.calls[1][1].headers['LinkedIn-Version']);
+  });
+});
