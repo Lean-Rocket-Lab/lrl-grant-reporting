@@ -28,6 +28,8 @@ const PLAN: Array<{ bareKey: string; add: string[] }> = [
   { bareKey: 'activity_type', add: ['Program Acceptance'] },
   // LRL's own programs, alongside the funder grants already there.
   { bareKey: 'program__grant_association', add: ['LOCAL', 'SAMA'] },
+  // 2026-10-19: GHL Events registrations become activities (lib/activities/sources/eventRegistration.ts).
+  { bareKey: 'activity_source', add: ['GHL Event'] },
 ];
 
 (async () => {

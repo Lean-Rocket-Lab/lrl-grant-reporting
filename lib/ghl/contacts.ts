@@ -45,6 +45,10 @@ function mapContact(c: any): Contact {
     website: c.website,
     tags: Array.isArray(c.tags) ? c.tags.map((t: any) => String(t)) : undefined,
     customFields: c.customFields,
+    // Attribution rides along for the conversion senders (GA client id, landing URL). Only the
+    // single-contact GET returns it; search and duplicate lookups omit it (measured 2026-10-19).
+    ...(c.lastAttributionSource ? { lastAttribution: c.lastAttributionSource } : {}),
+    ...(c.attributionSource ? { firstAttribution: c.attributionSource } : {}),
   };
 }
 

@@ -4,7 +4,7 @@
 > Start every planning chat here. Refreshed daily by the maintenance routine.
 > Companion docs: `PROJECT_ROADMAP.md` (the phase/sprint plan) · `CANONICAL_REPORTING_MODEL.md` (data spec).
 >
-> **Last refreshed:** 2026-09-14 (Sunday).
+> **Last refreshed:** 2026-09-30 (milestones section added; rest of file last refreshed 2026-09-14).
 >
 > ---
 > ## ✅ ZOOM MEETING LOGGING IS LIVE AND RUNNING NIGHTLY — 2026-09-14
@@ -180,6 +180,38 @@
 > because it is old. See the doc map.
 
 ---
+
+## 🆕 2026-10-19 — GHL Events registrations → Activities + GA4/LinkedIn conversions (BUILT, not deployed)
+
+**Spec: `docs/sprints/event-registration-conversions.md`** — go-live checklist at the bottom, in order.
+
+- LRL now runs events on **GHL Events**, and nothing ingested them: no Workshop / Event activities (TC
+  KPI 3 + 8) and no ad conversions (event pages take no tracking code, only a Meta Pixel ID).
+- New route `/api/event-registration-sync` + adapter `lib/activities/sources/eventRegistration.ts`:
+  one ticket per `(eventId, contactId)`, `registered = Yes`, `attended` blank, event date protected.
+  Same key drives at-most-once GA4 (Measurement Protocol, via the contact's stored GA client id) and
+  LinkedIn (Conversions API, hashed email + li_fat_id) sends through `lib/conversions/`.
+- 29 new tests; full suite 764 green; tsc clean (run in the cloud sandbox — the VM still can't run vitest).
+- **Waiting on Zach, in order:** add `activity_source` option `GHL Event` (add-field-options.ts) →
+  GA4 API secret + `event_registration` key event + env vars → commit/push → dry-run curl → wire the
+  "Event Conversion Tracking" workflow webhook (Custom Data: eventId / eventName / eventStart).
+- Also shipped this day (marketing, outside the app): Wix→GHL UTM handoff scripts verified; LinkedIn
+  Insight Tag live on Wix + funnels (partner 10227932); LinkedIn conversions `/submitted`, `/booked`.
+
+## 🆕 2026-09-29/30 — Milestones object BUILT; AI milestone suggester SPECCED (not built)
+
+**Spec: `docs/sprints/milestone-suggester.md`** — read it before touching milestones.
+
+- **Live in GHL:** `custom_objects.milestones` with status / definition_of_done / readiness_dimension /
+  `milestone_category` (12-option picklist, Zach-approved) / target + completed dates / evidence_link /
+  source (`staff` · `ai_intake` · `ai_session`). Owner = GHL's built-in record owner. Associations to
+  Company, Resource, Activity — ⚠️ **GHL swapped `milestone_activity` to activity → milestone.**
+- **Process decision:** intake PROPOSES, the EIR kickoff COMMITS, every drop is recorded.
+- **Dry-run answer keys** (Scott Labs 7/7 keep, Blue Entity 8/8 keep — both graded by Zach) are in the spec §6. **Cap: 3 Active milestones per company; AI proposes ≤3 new per run** (§4a).
+- **Finding:** every source the suggester needs is readable through GHL alone — Zoom summaries and staff
+  notes (`GET /contacts/{id}/notes`, each note already tagged with businessId + appointment), Activities,
+  **1:1 email synced into Conversations** (filter `source=campaign`), and LC Phone call transcripts.
+- **10-01: read-only suggester BUILT** (`scripts-ts/milestone-suggest.ts`, `lib/milestones/`). Scott Labs + SitSense PASS; Blue Entity FAILS on a data gap: **GHL email sync for that contact stops 09-14** while Gmail has threads to 09-30. See spec §9.
 
 ## ✅ SHIPPED 2026-09-17 — the Readiness Map, live and embeddable in a GHL dashboard
 
@@ -1608,3 +1640,14 @@ share both halves of the key.
   dry-run / apply / checkpoint / drift artifacts, Jul 31–Aug 19, ~1.2 MB). Only the three current artifacts
   remain in place: `catalog-dump-full.json` (8/21), `identity-audit.json`, `report-readiness-census.json`
   (both 8/27). The folder is gitignored, so nothing tracked moved. Reversible.
+
+> ---
+> ## 🔴 2026-10-13 — GHL domain-association switch: audit DONE, form rebuild BLOCKED by GHL behaviour
+> Read `docs/sprints/domain-switch-forms.md` first. Short version: forms can write Company fields
+> (verified), but **every submission from an existing contact creates a duplicate company** (verified
+> three ways). First-contact forms (Intake, SAMA, Fellows) can move to Company fields; returning-client
+> forms (Re-Scoring, Client Reporting, Milestone) cannot until a match mechanism is found. The
+> Re-Scoring form was restored to its pre-change version. 40 wrong company domains fixed, 9 duplicate
+> companies merged, 13 merge pairs + 39 domain reviews waiting on Zach in
+> `docs/audits/2026-10-13-domain-switch/`.
+> ---

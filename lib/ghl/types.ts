@@ -102,4 +102,26 @@ export interface Contact {
   /** GHL contact tags, lowercased by GHL. The reporting sequence sends to `client`. */
   tags?: string[];
   customFields?: ContactCustomFieldValue[];
+  /** GHL's First / Latest Attribution blocks, present only on GET /contacts/{id}. */
+  firstAttribution?: ContactAttribution;
+  lastAttribution?: ContactAttribution;
+}
+
+/** The fields of GHL's `attributionSource` / `lastAttributionSource` this app reads. */
+export interface ContactAttribution {
+  sessionSource?: string | null;
+  url?: string | null;
+  campaign?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  referrer?: string | null;
+  gclid?: string | null;
+  /** Raw GA cookie value, e.g. `GA1.1.1664579354.1792433630`. */
+  gaClientId?: string | null;
+  gaSessionId?: string | null;
+  medium?: string | null;
+  mediumId?: string | null;
+  [k: string]: unknown;
 }

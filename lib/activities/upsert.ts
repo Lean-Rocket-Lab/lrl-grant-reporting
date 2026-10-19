@@ -28,7 +28,7 @@ import { claimSourceEvent, lookupClaim, releaseClaim, resolveClaim } from './cla
 import { ACTIVITIES_OBJECT, type ActivityInput } from './schema';
 
 /** Which adapter wrote a record. Matches the `activity_source` option labels created on live. */
-export type ActivitySource = 'Appointment' | 'Form' | 'Wix Attendance' | 'Opportunity Stage' | 'Manual';
+export type ActivitySource = 'Appointment' | 'Form' | 'Wix Attendance' | 'GHL Event' | 'Opportunity Stage' | 'Manual';
 
 export const SOURCE_FIELD = 'activity_source';
 export const SOURCE_ID_FIELD = 'source_record_id';
