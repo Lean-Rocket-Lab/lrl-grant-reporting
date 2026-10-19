@@ -106,7 +106,10 @@ export function extractEventPayload(body: any, query: Record<string, unknown> = 
     eventId: q.eventId || pick(b, ['customData.eventId', 'customData.event_id', 'eventId', 'event_id', 'event.id', 'event.eventId', 'registration.eventId']),
     eventName: q.eventName || pick(b, ['customData.eventName', 'customData.event_name', 'eventName', 'event_name', 'event.name', 'event.title', 'eventTitle', 'registration.eventName']),
     eventStart: pick(b, ['customData.eventStart', 'customData.event_start', 'customData.eventDate', 'eventStart', 'event_start', 'eventDate', 'event_date', 'event.startDate', 'event.start_date', 'event.startTime', 'event.date']),
-    registeredAt: pick(b, ['registeredAt', 'registered_at', 'registration.createdAt', 'date_created', 'dateAdded']),
+    // ⚠️ NOT `date_created` / `dateAdded`: GHL's standard payload carries the CONTACT's fields at top
+    // level, so those are when the contact was created (measured 10/19: 2026-07-27 for a registration
+    // made 10/19). Reading them back-dated the activity AND made GA4 skip the hit as too old.
+    registeredAt: pick(b, ['customData.registeredAt', 'registeredAt', 'registered_at', 'registration.createdAt']),
     amount: Number.isFinite(amount) ? amount : undefined,
     currency: pick(b, ['customData.currency', 'currency', 'event.currency', 'payment.currency']),
     eventType: q.eventType || pick(b, ['customData.eventType', 'eventType', 'event_type', 'event.type']),
@@ -176,8 +179,23 @@ const DETROIT_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroi
  * Not toISOString(): a 7pm Eastern event is already "tomorrow" in UTC, and the date is the report key.
  * A bare date passes through untouched (parsing it would make it UTC midnight = the day before here).
  */
+const MONTHS: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+/**
+ * GHL's event start merge field, as delivered 2026-10-19: `"Nov 9th 2026, 12:00pm"`. JS Date cannot
+ * parse the ordinal, and the wall-clock time is already Eastern, so the calendar date is read
+ * straight off the string — no time-zone conversion, which could only move it.
+ */
+export function ghlHumanDate(v: string): string | null {
+  const m = v.trim().match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/);
+  if (!m) return null;
+  const mm = MONTHS[m[1].toLowerCase()];
+  return mm ? `${m[3]}-${mm}-${m[2].padStart(2, '0')}` : null;
+}
+
 export function dateOnly(v: string | undefined): string | null {
   if (v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return v.trim();
+  const human = v ? ghlHumanDate(v) : null;
+  if (human) return human;
   const d = toDate(v);
   return d ? DETROIT_DAY.format(d) : null;
 }

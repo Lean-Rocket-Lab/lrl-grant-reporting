@@ -153,3 +153,16 @@ describe('GHL standard payload', () => {
     expect(JSON.stringify(shape.eventish)).not.toContain('a@b.c');
   });
 });
+
+describe('live payload regressions (2026-10-19)', () => {
+  it("parses GHL's 'Nov 9th 2026, 12:00pm' start date", () => {
+    expect(dateOnly('Nov 9th 2026, 12:00pm')).toBe('2026-11-09');
+    expect(dateOnly('Dec 14th 2026, 3:30pm')).toBe('2026-12-14');
+    expect(dateOnly('November 1st 2026, 7:30am')).toBe('2026-11-01');
+    expect(dateOnly('Oct 22nd 2026, 11:59pm')).toBe('2026-10-22');
+  });
+  it("never treats the contact's date_created as the registration time", () => {
+    const p = extractEventPayload({ contact_id: 'tps7vxu0eR5duffFaDXS', date_created: '2026-07-27T13:23:27.219Z', customData: { eventId: 'e' } });
+    expect(p.registeredAt).toBeUndefined();
+  });
+});
