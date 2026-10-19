@@ -1,7 +1,7 @@
 # GHL Events registrations → Activities + server-side conversions
 
-> **Status 2026-10-19: CODE BUILT + TESTED (29 new tests, full suite 764 green, tsc clean). NOT
-> DEPLOYED. NOT WIRED.** Go-live checklist at the bottom, in order.
+> **Status 2026-10-19 20:43: LIVE.** Steps 1–6 below done and verified on a real RSVP; GA4 sending.
+> Step 7 (LinkedIn token) and 8 (backfill) open. See PROJECT_STATE for the three live-payload facts.
 
 ## Why
 

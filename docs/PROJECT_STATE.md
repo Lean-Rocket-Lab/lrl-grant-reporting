@@ -181,7 +181,20 @@
 
 ---
 
-## 🆕 2026-10-19 — GHL Events registrations → Activities + GA4/LinkedIn conversions (BUILT, not deployed)
+## ✅ 2026-10-19 — GHL Events registrations → Activities + GA4 conversions: LIVE (LinkedIn pending a token)
+
+**VERIFIED LIVE 10/19 20:37–20:43** on a real RSVP (Three Quotes, Zach): workflow "Event Conversion
+Tracking" → app (3.3s) → Activity `6ad67f7b49c7212ae496dfa5` created on contact + company → replay
+`updated` (no duplicate) → GA4 `sent`. Three live-payload facts, all now handled in code + tests:
+- **Event start arrives as `"Nov 9th 2026, 12:00pm"`** — JS Date can't parse the ordinal; `ghlHumanDate()` does.
+- **GHL's standard payload carries CONTACT fields at top level** (`date_created` = contact creation). Never
+  read them as event/registration data — doing so back-dated the activity to 07-27 and made GA4 skip it.
+- **`gaClientId` is NULL on event registrations** (no GA tag on Events pages). The id is recovered from
+  the `_gl` linker param in the stored landing URL (`gaClientIdFromLinker`).
+- The webhook header must be named exactly `x-webhook-secret` (first attempt was rejected silently).
+- ⬜ The first test RSVP (AMTC Launch, 20:28) was rejected by the bad header and has no Activity.
+
+### Build notes (original entry)
 
 **Spec: `docs/sprints/event-registration-conversions.md`** — go-live checklist at the bottom, in order.
 
