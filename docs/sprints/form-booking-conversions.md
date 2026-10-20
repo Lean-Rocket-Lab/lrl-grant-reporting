@@ -68,8 +68,8 @@ and switch the two LinkedIn conversions from Insight-Tag URL rules to Conversion
    - **"Conversion – Form Submitted"**: TWO triggers on one workflow — *Form Submitted* (all forms)
      and *Survey Submitted* (all surveys). Webhook
      `POST https://lrl-grant-reporting.vercel.app/api/conversion-sync?type=form_submitted`,
-     header `x-webhook-secret` = `WIX_SYNC_WEBHOOK_SECRET`, Custom Data `formName` = form name merge
-     field and `surveyName` = survey name merge field (both optional; whichever is non-blank labels the GA4 param).
+     header `x-webhook-secret` = `WIX_SYNC_WEBHOOK_SECRET`. **No Custom Data needed** — the form id comes
+     from the contact's attribution record (`mediumId`).
    - **"Conversion – Meeting Booked"**: trigger *Customer Booked Appointment*. Webhook
      `…/api/conversion-sync?type=meeting_booked`, same header, Custom Data **`appointmentId` = `{{appointment.id}}`** (required — without it the key can't be derived and the delivery is skipped with `no-key`).
    Publish both. Check the Vercel log for `[conversion-sync] shadow` on the next real submission.
@@ -89,8 +89,11 @@ and switch the two LinkedIn conversions from Insight-Tag URL rules to Conversion
 
 ## Known limits / open items
 
-- GHL's Form Submitted payload has no submission id → hour-bucket key. Same contact, same form, twice
-  within an hour = one conversion. Acceptable (double submits); documented.
+- GHL's Form Submitted payload has no submission id OR form id (measured 10-20: `triggerData` is `{}`,
+  no form merge fields in the builder). The form id is read instead from the contact's Latest
+  Attribution (`medium: form`, `mediumId: <form id>`) → key `form:<contact>:<formId>:<UTC hour>`. Same
+  contact, same form, twice within an hour = one conversion. Acceptable (double submits). No Custom
+  Data is needed on the form workflow.
 - GA4 MP events report `lrl_reporter: server` so a server-vs-browser split is one custom dimension away.
 - Meta `fbp` (browser cookie) is not stored by GHL; `fbc` from `fbclid` + email/phone carry matching.
 - Google Ads: link to GA4 and import `form_submitted` / `meeting_booked` / `event_registration` as

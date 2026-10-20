@@ -71,7 +71,7 @@ export interface SiteConversionResult {
   reason?: 'no-key' | 'no-contact';
   detail?: string;
   /** What the contact's attribution record offered, for the log line and the operator. */
-  identifiers?: { gaClientId: boolean; gaSessionId: boolean; liFatId: boolean; fbclid: boolean; email: boolean; phone: boolean; utmSource?: string | null; utmCampaign?: string | null };
+  identifiers?: { gaClientId: boolean; gaSessionId: boolean; liFatId: boolean; fbclid: boolean; email: boolean; phone: boolean; utmSource?: string | null; utmCampaign?: string | null; formId?: string | null };
   conversions?: {
     ga4?: Ga4Result | { status: 'skipped'; reason: 'already-sent' | 'channel-off' };
     linkedin?: LinkedInResult | { status: 'skipped'; reason: 'already-sent' | 'channel-off' };
@@ -137,14 +137,27 @@ export async function reportSiteConversion(
 ): Promise<SiteConversionResult> {
   const mode = opts.mode ?? conversionMode();
   const base = { type: input.type, contactId: input.contactId, mode };
-  const key = siteConversionKey(input);
-  if (!key) return { ...base, status: 'skipped', reason: 'no-key', detail: 'meeting_booked needs an appointmentId (send {"appointmentId":"{{appointment.id}}"} in Custom Data)' };
+  // meeting_booked can be refused before the contact fetch; form_submitted may still learn its form
+  // id from the contact's attribution record below, so its key is derived after.
+  if (input.type === 'meeting_booked' && !siteConversionKey(input)) {
+    return { ...base, status: 'skipped', reason: 'no-key', detail: 'meeting_booked needs an appointmentId (send {"appointmentId":"{{appointment.id}}"} in Custom Data)' };
+  }
 
   const client = opts.client ?? ghl();
   const contact: any = await getContact(input.contactId, client).catch(() => null);
-  if (!contact) return { ...base, key, status: 'skipped', reason: 'no-contact' };
+  if (!contact) return { ...base, key: siteConversionKey(input) ?? undefined, status: 'skipped', reason: 'no-contact' };
 
   const attr: any = contact.lastAttribution ?? contact.firstAttribution ?? {};
+  // WHICH FORM: GHL's Form Submitted webhook carries no form id (measured 2026-10-20: `triggerData`
+  // is `{}`), but the contact's Latest Attribution does — `medium: "form"`, `mediumId: <form id>`
+  // (the popup's "Medium Id"). Same for surveys. Use it when the webhook supplied nothing, so the key
+  // distinguishes forms and GA4 gets a label.
+  const attributedForm = input.type === 'form_submitted' && !input.formId && !input.formName && /^(form|survey)$/i.test(String(attr.medium ?? '')) && attr.mediumId
+    ? String(attr.mediumId)
+    : undefined;
+  if (attributedForm) input = { ...input, formId: attributedForm };
+  const key = siteConversionKey(input);
+  if (!key) return { ...base, status: 'skipped', reason: 'no-key' };
   const first: any = contact.firstAttribution ?? {};
   const url: string | null = attr.url ?? null;
   const occurredAt = input.occurredAt ?? new Date();
@@ -155,7 +168,7 @@ export async function reportSiteConversion(
   const identifiers = {
     gaClientId: Boolean(gaClientId), gaSessionId: Boolean(gaSessionId), liFatId: Boolean(liFatId), fbclid: Boolean(fbclid),
     email: Boolean(contact.email), phone: Boolean(contact.phone),
-    utmSource: attr.utmSource ?? null, utmCampaign: attr.campaign ?? null,
+    utmSource: attr.utmSource ?? null, utmCampaign: attr.campaign ?? null, formId: input.formId ?? null,
   };
 
   // Shadow mode is a dry run on every channel, plus the log line that IS the shadow count.

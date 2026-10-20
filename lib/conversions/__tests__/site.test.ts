@@ -188,6 +188,20 @@ describe('reportSiteConversion', () => {
     expect((claimSourceEvent as any).mock.calls.map((c: any[]) => c[0]).sort()).toEqual(['conversion:ga4', 'conversion:linkedin', 'conversion:meta']);
   });
 
+  it('learns the form id from the contact attribution record when the webhook has none', async () => {
+    contactStore[contact.id] = { ...contact, lastAttribution: { ...contact.lastAttribution, medium: 'form', mediumId: 'TzYr5lNmfN4QfOQVCk97' } };
+    process.env.GA4_MEASUREMENT_ID = 'G-X'; process.env.GA4_API_SECRET = 's';
+    let body: any;
+    const f = vi.fn(async (_u: string, init: any) => { body = JSON.parse(init.body); return { ok: true, status: 200, json: async () => ({}), text: async () => '{}' }; }) as any;
+    const r = await reportSiteConversion({ type: 'form_submitted', contactId: contact.id, occurredAt: new Date('2026-10-20T20:43:00Z') }, { mode: 'live', channels: ['ga4'], fetchImpl: f });
+    expect(r.key).toBe(`form:${contact.id}:TzYr5lNmfN4QfOQVCk97:2026-10-20T20`);
+    expect(r.identifiers?.formId).toBe('TzYr5lNmfN4QfOQVCk97');
+    expect(body.events[0].params.lrl_form).toBe('TzYr5lNmfN4QfOQVCk97');
+    // an explicit formName from the webhook still wins
+    const r2 = await reportSiteConversion({ type: 'form_submitted', contactId: contact.id, formName: 'Join', occurredAt: new Date('2026-10-20T20:43:00Z') }, { mode: 'live', channels: ['ga4'], fetchImpl: f });
+    expect(r2.key).toBe(`form:${contact.id}:Join:2026-10-20T20`);
+  });
+
   it('honours the channel switch and explains a missing appointment id / contact', async () => {
     contactStore[contact.id] = contact;
     process.env.GA4_MEASUREMENT_ID = 'G-X'; process.env.GA4_API_SECRET = 's';
