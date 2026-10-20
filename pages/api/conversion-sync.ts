@@ -31,9 +31,12 @@ export function describeConversionPayload(body: any, query: Record<string, unkno
     if (!o || typeof o !== 'object' || depth > 2) return;
     for (const [k, v] of Object.entries(o)) {
       const path = prefix ? `${prefix}.${k}` : k;
-      if (/form|survey|appointment|calendar|workflow|submission|custom/i.test(k) && !/date|time/i.test(k)) {
+      if (/^(triggerData|workflow|customData)$/.test(k) && v && typeof v === 'object') {
+        // The trigger's own block: show it whole (ids/names only — it does not carry contact values).
+        interesting[path] = JSON.stringify(v).slice(0, 1500);
+      } else if (/^[a-z][a-z0-9_]*$/i.test(k) && /form|survey|appointment|calendar|submission/i.test(k) && !/date|time/i.test(k)) {
         interesting[path] = v && typeof v === 'object' ? (Array.isArray(v) ? `[array ${v.length}]` : Object.keys(v)) : v;
-      } else if (v && typeof v === 'object') walk(v, path, depth + 1);
+      } else if (v && typeof v === 'object' && /^[a-z][a-z0-9_]*$/i.test(k)) walk(v, path, depth + 1);
     }
   };
   walk(b, '', 0);
