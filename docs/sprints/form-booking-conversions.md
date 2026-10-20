@@ -1,6 +1,6 @@
 # Form + booking conversions, server-side (GA4 · LinkedIn · Meta)
 
-**Built 2026-10-20, shipped in shadow mode.** Form submissions and meeting bookings are reported to
+**Built 2026-10-20, shipped in shadow mode; LIVE the same evening** (Zach: nothing to protect — no campaigns, no reporting period — so the comparison window was skipped; old LinkedIn Insight-Tag conversions deleted). Form submissions and meeting bookings are reported to
 GA4, LinkedIn and Meta from the app, keyed to one dedupe id per conversion, instead of (eventually)
 from GTM URL rules on `/submitted` and `/booked`. Event registrations already work this way
 (`docs/sprints/event-registration-conversions.md`); this is the same pipeline for the other two.
@@ -50,7 +50,7 @@ and switch the two LinkedIn conversions from Insight-Tag URL rules to Conversion
 
 | Var | Value | Needed for |
 |---|---|---|
-| `CONVERSION_SYNC_MODE` | `shadow` now → `live` at cutover | gate |
+| `CONVERSION_SYNC_MODE` | `live` (set 2026-10-20 evening; `shadow` to fall back) | gate |
 | `CONVERSION_SYNC_CHANNELS` | optional, e.g. `ga4,linkedin` | per-channel switch |
 | `LINKEDIN_FORM_CONVERSION_ID` | numeric id of a **Conversions API** conversion "Lead: Form Submitted" | LinkedIn form |
 | `LINKEDIN_BOOKING_CONVERSION_ID` | same for "Lead: Booked Appointment" | LinkedIn booking |
