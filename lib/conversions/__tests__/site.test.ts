@@ -202,6 +202,16 @@ describe('reportSiteConversion', () => {
     expect(r2.key).toBe(`form:${contact.id}:Join:2026-10-20T20`);
   });
 
+  it('never falls back to the event-registration LinkedIn conversion when the per-type id is unset', async () => {
+    contactStore[contact.id] = contact;
+    process.env.LINKEDIN_CAPI_TOKEN = 't'; process.env.LINKEDIN_EVENT_CONVERSION_ID = '29846556';
+    delete process.env.LINKEDIN_BOOKING_CONVERSION_ID;
+    const f = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}), text: async () => '{}' })) as any;
+    const r = await reportSiteConversion({ type: 'meeting_booked', contactId: contact.id, appointmentId: 'WG95fkmgzQAt2pG0Rf4f' }, { mode: 'live', channels: ['linkedin'], fetchImpl: f });
+    expect(r.conversions?.linkedin).toMatchObject({ status: 'skipped', reason: 'not-configured' });
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it('honours the channel switch and explains a missing appointment id / contact', async () => {
     contactStore[contact.id] = contact;
     process.env.GA4_MEASUREMENT_ID = 'G-X'; process.env.GA4_API_SECRET = 's';

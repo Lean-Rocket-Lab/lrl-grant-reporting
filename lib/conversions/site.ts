@@ -190,9 +190,14 @@ export async function reportSiteConversion(
           params: { lrl_conversion: input.type, lrl_form: (input.formName ?? input.formId ?? undefined)?.slice(0, 100), lrl_reporter: 'server' },
         }, { dryRun, fetchImpl }), { dryRun }).then((o) => o.result)
       : Promise.resolve(off),
-    on('linkedin')
+    // The LinkedIn sender falls back to LINKEDIN_EVENT_CONVERSION_ID when no id is given — right for
+    // event registrations, WRONG here: a booking must never be reported as an event registration.
+    // (Caught in shadow mode on the first real booking, 2026-10-20.) No per-type id → not configured.
+    on('linkedin') && !process.env[names.linkedinEnv]
+      ? Promise.resolve({ status: 'skipped' as const, reason: 'not-configured' as const, detail: `${names.linkedinEnv} unset` })
+      : on('linkedin')
       ? sendOnce('linkedin', key, () => sendLinkedInConversion({
-          conversionId: process.env[names.linkedinEnv],
+          conversionId: process.env[names.linkedinEnv]!,
           email: contact.email,
           firstName: contact.firstName,
           lastName: contact.lastName,
