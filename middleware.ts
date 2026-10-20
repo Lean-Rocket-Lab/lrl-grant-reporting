@@ -29,6 +29,7 @@ import { STAFF_COOKIE, verifyStaffSession } from './lib/security/staffSession';
 const SELF_ENFORCING = [
   '/api/form-sync',
   '/api/event-registration-sync',
+  '/api/conversion-sync',
   '/api/sync/up',
   '/api/wix-sync',
   '/api/appointment-sync',

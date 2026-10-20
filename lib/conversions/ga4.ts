@@ -64,17 +64,40 @@ export function normalizeGaClientId(raw: string | null | undefined): string | nu
  * the id, never set a cookie from it.
  */
 export function gaClientIdFromLinker(url: string | null | undefined): string | null {
+  const decoded = linkerValue(url, (k) => k === '_ga');
+  return decoded ? normalizeGaClientId(decoded) : null;
+}
+
+/**
+ * The GA4 session id carried in the same `_gl` linker, from the `_ga_<MEASUREMENT>` cookie it
+ * encodes: `GS2.1.s1792502755$o1$g1$t1792502755$j60$l0$h0` → `1792502755` (the `s` field).
+ *
+ * WHY: a Measurement Protocol event that carries only `client_id` can land in GA4 as a session of
+ * its own with source `(not set)`, which breaks campaign attribution for the very conversion we are
+ * reporting. With `session_id` GA4 files it under the session that saw the ad click. GHL's
+ * `gaSessionId` is null in practice (same reason as the client id), so this is the reliable source.
+ */
+export function gaSessionIdFromLinker(url: string | null | undefined): string | null {
+  const decoded = linkerValue(url, (k) => /^_ga_[A-Z0-9]+$/i.test(k));
+  if (!decoded) return null;
+  const m = decoded.match(/(?:^|\.|\$)s(\d{9,11})(?:\$|$)/);
+  return m ? m[1] : null;
+}
+
+/** The decoded value that follows the first `_gl` key matching `pick` (null when absent/undecodable). */
+function linkerValue(url: string | null | undefined, pick: (key: string) => boolean): string | null {
   if (!url) return null;
   let gl: string | null = null;
   try { gl = new URL(url).searchParams.get('_gl'); } catch { gl = (String(url).match(/[?&]_gl=([^&#]+)/) ?? [])[1] ?? null; }
   if (!gl) return null;
-  const parts = decodeURIComponent(gl).split('*');
-  const i = parts.indexOf('_ga');
+  let parts: string[];
+  try { parts = decodeURIComponent(gl).split('*'); } catch { parts = gl.split('*'); }
+  const i = parts.findIndex(pick);
   if (i < 0 || !parts[i + 1]) return null;
   try {
+    // GA's linker is base64url with `.` as padding.
     const b64 = parts[i + 1].replace(/\./g, '=').replace(/-/g, '+').replace(/_/g, '/');
-    const decoded = Buffer.from(b64, 'base64').toString('utf8');
-    return normalizeGaClientId(decoded);
+    return Buffer.from(b64, 'base64').toString('utf8');
   } catch { return null; }
 }
 

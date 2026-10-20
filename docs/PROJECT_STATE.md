@@ -181,6 +181,36 @@
 
 ---
 
+## 🆕 2026-10-20 — Form + booking conversions server-side (GA4 · LinkedIn · Meta): BUILT, in shadow mode
+
+**Spec: `docs/sprints/form-booking-conversions.md`** — go-live checklist at the bottom, in order.
+- New `/api/conversion-sync?type=form_submitted|meeting_booked` + `lib/conversions/site.ts`: GHL webhook →
+  contact attribution → one dedupe key (`appt:<id>` / `form:<contact>:<form>:<hour>`) → GA4 MP (now with
+  **`session_id` recovered from the `_gl` linker**, so the conversion joins the ad-click session instead of
+  landing as `(not set)`), LinkedIn CAPI (per-type conversion id), **Meta CAPI (new `lib/conversions/meta.ts`)**.
+- `CONVERSION_SYNC_MODE=shadow` (default) validates/plans and logs one line per conversion — the two-week
+  side-by-side against the GTM URL-rule tags with no double counting. `live` + pausing the two GTM tags
+  happen on the same day. No Activities created (Zach: ads only for now).
+- Tests: `lib/conversions/__tests__/site.test.ts` (17, incl. the real 10-20 `_gl` linker); suite 795 green; tsc clean.
+- **Waiting on Zach:** commit/push from the Mac → two workflows (Form Submitted; Customer Booked
+  Appointment with Custom Data `appointmentId={{appointment.id}}`) → dry-run curl → LinkedIn API
+  conversion ids → Meta dataset id + token when access lands.
+
+## ✅ 2026-10-20 — Google Tag Manager LIVE on Wix + all 6 GHL funnels (marketing, outside the app)
+
+Container **GTM-T5XV5R6J** (v5) is now the only tracking code on www.leanrocketlab.org and on every GHL
+funnel (Join a Collective, Client Reporting, Intake Form, Intake Form Landing Page, SaaS, SAMA
+Application). Inside it: Google tag G-4WMKNE5XEZ (Script B as setup tag so UTMs are restored before
+gtag reads the URL), GA4 events `form_submitted` / `meeting_booked`, LinkedIn Insight Tag 10227932,
+Scripts A (Wix) / B (GHL hosts), and GHL's own tracking script for Wix. Verified in GA4 Realtime from
+both hosts. Wix's old entries are toggled OFF (not deleted) = rollback. Details + quirks:
+project memory `gtm-migration-plan.md`. Not touched: GHL Website "AMTC Consortium" (jacksonamtc.com,
+no tracking code), GHL Events pages (no code slot), Meta Pixel (GHL-native).
+- Also 10/19 evening: LinkedIn CAPI live for event registrations (conversion "Event Registration"
+  29846556; token expires ~12-18; API version walk-back after 202509 gave 426).
+- ⬜ Zach: one real form submission to re-confirm GHL attribution with Script B served from GTM.
+- ⬜ Open decision (held): `event_type` Workshop vs Tech/Innovation Event rule.
+
 ## ✅ 2026-10-19 — GHL Events registrations → Activities + GA4 conversions: LIVE (LinkedIn pending a token)
 
 **VERIFIED LIVE 10/19 20:37–20:43** on a real RSVP (Three Quotes, Zach): workflow "Event Conversion

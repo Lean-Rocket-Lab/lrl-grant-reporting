@@ -16,6 +16,8 @@ import { describe, expect, it } from 'vitest';
 /** Must match SELF_ENFORCING in middleware.ts. A route added there needs adding here. */
 const SELF_ENFORCING = [
   'form-sync.ts',
+  'event-registration-sync.ts',
+  'conversion-sync.ts',
   'sync/up.ts',
   'wix-sync.ts',
   'appointment-sync.ts',
