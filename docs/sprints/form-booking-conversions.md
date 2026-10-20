@@ -65,9 +65,11 @@ and switch the two LinkedIn conversions from Insight-Tag URL rules to Conversion
 1. **Commit + push from the Mac** (this doc, `lib/conversions/{site,meta,ga4}.ts`,
    `pages/api/conversion-sync.ts`, `middleware.ts`, tests). Deploys with `CONVERSION_SYNC_MODE` unset = shadow.
 2. **Wire two GHL workflows** (Automation > Workflows), each: trigger → Webhook action:
-   - **"Conversion – Form Submitted"**: trigger *Form Submitted* (all forms). Webhook
+   - **"Conversion – Form Submitted"**: TWO triggers on one workflow — *Form Submitted* (all forms)
+     and *Survey Submitted* (all surveys). Webhook
      `POST https://lrl-grant-reporting.vercel.app/api/conversion-sync?type=form_submitted`,
-     header `x-webhook-secret` = `WIX_SYNC_WEBHOOK_SECRET`, Custom Data `formName` = the form name merge field (optional, labels the GA4 param).
+     header `x-webhook-secret` = `WIX_SYNC_WEBHOOK_SECRET`, Custom Data `formName` = form name merge
+     field and `surveyName` = survey name merge field (both optional; whichever is non-blank labels the GA4 param).
    - **"Conversion – Meeting Booked"**: trigger *Customer Booked Appointment*. Webhook
      `…/api/conversion-sync?type=meeting_booked`, same header, Custom Data **`appointmentId` = `{{appointment.id}}`** (required — without it the key can't be derived and the delivery is skipped with `no-key`).
    Publish both. Check the Vercel log for `[conversion-sync] shadow` on the next real submission.

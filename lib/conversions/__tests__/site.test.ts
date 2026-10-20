@@ -128,6 +128,11 @@ describe('extractConversionPayload', () => {
     );
     expect(p).toMatchObject({ type: 'meeting_booked', contactId: 'AbCdEfGhIjKlMnOpQrSt', appointmentId: 'ZyXwVuTsRqPoNmLkJiHg', formName: 'Join', via: 'contact_id' });
   });
+  it('takes surveyName when formName is blank (one workflow, two triggers)', () => {
+    const p = extractConversionPayload({ contact_id: 'AbCdEfGhIjKlMnOpQrSt', customData: { formName: '', surveyName: 'Intake Survey' } }, { type: 'form_submitted' });
+    expect(p.formName).toBe('Intake Survey');
+    expect(extractConversionPayload({ contact_id: 'AbCdEfGhIjKlMnOpQrSt', customData: { formName: 'Join', surveyName: '' } }, { type: 'form_submitted' }).formName).toBe('Join');
+  });
   it('rejects an unknown type and never treats contact date fields as ids', () => {
     const p = extractConversionPayload({ contact_id: 'AbCdEfGhIjKlMnOpQrSt', date_created: '2026-07-27' }, { type: 'purchase' });
     expect(p.type).toBeUndefined();

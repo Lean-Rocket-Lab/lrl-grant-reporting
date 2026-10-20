@@ -124,7 +124,9 @@ export function extractConversionPayload(body: any, query: Record<string, unknow
   const appointmentId = [cd.appointmentId, cd.appointment_id, b.appointmentId, b.appointment?.id, b.calendar?.appointmentId, b.calendar?.id, query.appointmentId]
     .map(str).find((v) => v && GHL_ID.test(v));
   const formId = [cd.formId, cd.form_id, b.formId, b.form_id, b.form?.id, query.formId].map(str).find(Boolean);
-  const formName = [cd.formName, cd.form_name, b.formName, b.form?.name, query.formName].map(str).find(Boolean);
+  // One workflow can carry both the Form Submitted and Survey Submitted triggers; GHL leaves the
+  // merge field that does not apply blank, so take whichever label arrived.
+  const formName = [cd.formName, cd.form_name, cd.surveyName, cd.survey_name, b.formName, b.form?.name, b.surveyName, b.survey?.name, query.formName, query.surveyName].map(str).find(Boolean);
   const conversionKey = [cd.conversionKey, b.conversionKey, query.conversionKey].map(str).find(Boolean);
   return { type, contactId, appointmentId, formId, formName, conversionKey, via };
 }
