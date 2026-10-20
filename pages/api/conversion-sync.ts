@@ -23,9 +23,29 @@ function authorized(req: NextApiRequest): boolean {
   return typeof got === 'string' && got === expected;
 }
 
+/** Key names at the top two levels, plus the values of keys that look like form/survey/appointment/workflow ids or names. */
+export function describeConversionPayload(body: any, query: Record<string, unknown>) {
+  const b = body && typeof body === 'object' ? body : {};
+  const interesting: Record<string, unknown> = {};
+  const walk = (o: any, prefix: string, depth: number) => {
+    if (!o || typeof o !== 'object' || depth > 2) return;
+    for (const [k, v] of Object.entries(o)) {
+      const path = prefix ? `${prefix}.${k}` : k;
+      if (/form|survey|appointment|calendar|workflow|submission|custom/i.test(k) && !/date|time/i.test(k)) {
+        interesting[path] = v && typeof v === 'object' ? (Array.isArray(v) ? `[array ${v.length}]` : Object.keys(v)) : v;
+      } else if (v && typeof v === 'object') walk(v, path, depth + 1);
+    }
+  };
+  walk(b, '', 0);
+  return { type: query.type ?? null, echo: query.echo === '1', keys: Object.keys(b), customDataKeys: Object.keys(b.customData ?? {}), interesting };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!authorized(req)) return res.status(401).json({ error: 'Unauthorized' });
+  // Payload shape on EVERY delivery (echo included): key names + form/survey/appointment-ish values,
+  // never contact values. GHL's trigger payloads are undocumented; this is how they get read.
+  console.log('[conversion-sync] payload', JSON.stringify(describeConversionPayload(req.body, req.query)));
   if (req.query.echo === '1') return res.status(200).json({ echo: true, query: req.query, body: req.body });
 
   const { via, ...input } = extractConversionPayload(req.body, req.query as Record<string, unknown>);
