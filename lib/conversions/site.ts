@@ -225,10 +225,11 @@ export async function reportSiteConversion(
   ]);
 
   const result: SiteConversionResult = { ...base, key, status: 'reported', identifiers, conversions: { ga4, linkedin, meta } };
-  if (mode === 'shadow' && !opts.dryRun) {
-    // The shadow ledger: one line per conversion the server WOULD have reported. Compare its count
-    // with GTM's platform counts over the same window before flipping to live.
-    console.log('[conversion-sync] shadow', JSON.stringify({ type: input.type, key, contactId: input.contactId, identifiers, ga4: ga4.status, linkedin: linkedin.status, meta: meta.status }));
+  if (!opts.dryRun) {
+    // One line per conversion, in both modes: in shadow it is the would-have-sent ledger; in live it
+    // is how a failed or skipped send (expired token, missing client id) gets noticed in the log.
+    const why = (r: any) => (r.status === 'sent' || r.status === 'validated' || r.status === 'planned') ? r.status : `${r.status}:${r.reason ?? ''}`;
+    console.log(`[conversion-sync] ${mode}`, JSON.stringify({ type: input.type, key, contactId: input.contactId, identifiers, ga4: why(ga4), linkedin: why(linkedin), meta: why(meta) }));
   }
   return result;
 }
