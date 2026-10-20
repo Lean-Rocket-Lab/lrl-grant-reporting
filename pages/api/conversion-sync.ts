@@ -37,7 +37,12 @@ export function describeConversionPayload(body: any, query: Record<string, unkno
     }
   };
   walk(b, '', 0);
-  return { type: query.type ?? null, echo: query.echo === '1', keys: Object.keys(b), customDataKeys: Object.keys(b.customData ?? {}), interesting };
+  // GHL's standard payload carries EVERY custom field in the account as a top-level key, labelled
+  // by its display name ("Expense Vendor (item 10)" …) — hundreds of them. Keep the machine-named
+  // keys (contact_id, form_id, …), which is where a form/submission id would be, and count the rest.
+  const all = Object.keys(b);
+  const machine = all.filter((k) => /^[a-z][a-z0-9_.]*$/i.test(k) && !/\s/.test(k));
+  return { type: query.type ?? null, echo: query.echo === '1', interesting, customDataKeys: Object.keys(b.customData ?? {}), machineKeys: machine, otherKeyCount: all.length - machine.length };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
