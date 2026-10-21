@@ -166,3 +166,23 @@ describe('live payload regressions (2026-10-19)', () => {
     expect(p.registeredAt).toBeUndefined();
   });
 });
+
+describe('resolveEventGaIds (event doorway + fallback)', async () => {
+  const { resolveEventGaIds } = await import('../sources/eventRegistration');
+  const { fallbackGaClientId } = await import('../../conversions/ga4');
+  const DOOR = 'https://go.leanrocketlab.org/events/event-details/6ac6a0a2e02207e0884dfb9e?utm_source=linkedin&lrl_ga=1891538222.1792502755&lrl_gs=1792502755';
+  const BARE = 'https://go.leanrocketlab.org/events/event-details/6ac6a0a2e02207e0884dfb9e';
+  it('prefers the doorway ids and reports as server', () => {
+    expect(resolveEventGaIds('c1', { url: DOOR, gaClientId: null }, null)).toEqual({ clientId: '1891538222.1792502755', sessionId: '1792502755', reporter: 'server' });
+  });
+  it('falls back to a stable per-contact id for a bare arrival, tagged server-fallback', () => {
+    const r = resolveEventGaIds('kdVDU7oACLAEPQs8aedV', { url: BARE, gaClientId: null }, null);
+    expect(r.reporter).toBe('server-fallback');
+    expect(r.clientId).toMatch(/^\d{10}\.\d{10}$/);
+    expect(r.clientId).toBe(fallbackGaClientId('kdVDU7oACLAEPQs8aedV'));
+    expect(resolveEventGaIds('other', { url: BARE }, null).clientId).not.toBe(r.clientId);
+  });
+  it('fallback can be switched off', () => {
+    expect(resolveEventGaIds('c1', { url: BARE }, null, false)).toEqual({ clientId: null, sessionId: null, reporter: 'server' });
+  });
+});

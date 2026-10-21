@@ -28,7 +28,7 @@ import { GhlClient, ghl } from '../../ghl/client';
 import { getContact } from '../../ghl/contacts';
 import { upsertActivity, type UpsertActivityResult } from '../upsert';
 import type { CreateActivityOptions } from '../create';
-import { sendGa4Event, gaClientIdFromLinker, type Ga4Result } from '../../conversions/ga4';
+import { sendGa4Event, gaClientIdFromLinker, gaSessionIdFromLinker, gaIdsFromDoorway, fallbackGaClientId, type Ga4Result } from '../../conversions/ga4';
 import { sendLinkedInConversion, liFatIdFromUrl, type LinkedInResult } from '../../conversions/linkedin';
 import { sendOnce } from '../../conversions/ledger';
 
@@ -202,6 +202,22 @@ export function dateOnly(v: string | undefined): string | null {
 
 // ---------------------------------------------------------------------------------------------
 
+/** Which GA4 identity an event registration is reported under, and how it was obtained. */
+export function resolveEventGaIds(
+  contactId: string,
+  attr: any,
+  first: any,
+  fallbackEnabled = process.env.GA4_EVENT_FALLBACK !== '0',
+): { clientId: string | null; sessionId: string | null; reporter: 'server' | 'server-fallback' } {
+  const door = gaIdsFromDoorway(attr?.url);
+  if (attr?.gaClientId) return { clientId: attr.gaClientId, sessionId: attr.gaSessionId ?? door.sessionId ?? gaSessionIdFromLinker(attr.url), reporter: 'server' };
+  if (door.clientId) return { clientId: door.clientId, sessionId: door.sessionId, reporter: 'server' };
+  const linked = gaClientIdFromLinker(attr?.url) ?? gaClientIdFromLinker(first?.url);
+  if (linked) return { clientId: linked, sessionId: gaSessionIdFromLinker(attr?.url) ?? gaSessionIdFromLinker(first?.url), reporter: 'server' };
+  if (fallbackEnabled) return { clientId: fallbackGaClientId(contactId), sessionId: null, reporter: 'server-fallback' };
+  return { clientId: null, sessionId: null, reporter: 'server' };
+}
+
 export async function ingestEventRegistration(
   input: EventRegistrationInput,
   opts: EventRegistrationOptions = {},
@@ -249,19 +265,23 @@ export async function ingestEventRegistration(
   if (opts.noConversions) return { ...base, eventKey, status: 'ingested', activity, eventType };
 
   const attr = contact.lastAttribution ?? contact.firstAttribution ?? {};
+  const ga = resolveEventGaIds(input.contactId, attr, contact.firstAttribution);
   const value = input.amount && input.amount > 0 ? { amount: input.amount, currencyCode: (input.currency || 'USD').toUpperCase() } : null;
   const fetchImpl = opts.fetchImpl;
 
   const [ga4, linkedin] = await Promise.all([
     sendOnce('ga4', eventKey, () => sendGa4Event({
-      // GHL stores null here for event registrations (no GA tag on Events pages); the id survives in
-      // the landing URL's `_gl` linker param, so fall back to that before giving up.
-      clientId: attr.gaClientId || gaClientIdFromLinker(attr.url) || gaClientIdFromLinker(contact.firstAttribution?.url),
-      sessionId: attr.gaSessionId,
+      // GHL stores null here for event registrations (no GA tag on Events pages). In order: the ids
+      // stamped by the event doorway page (lrl_ga/lrl_gs), the `_gl` linker from a Wix click, and
+      // finally — unless GA4_EVENT_FALLBACK=0 — a stable per-contact pseudo id so the registration
+      // is at least COUNTED (source "(not set)"; tagged server-fallback so reports can exclude it).
+      clientId: ga.clientId,
+      sessionId: ga.sessionId,
       name: GA4_EVENT_NAME,
       occurredAt: registeredAt,
       // No personal data — ids and names of the EVENT only.
       params: {
+        lrl_reporter: ga.reporter,
         lrl_event_id: input.eventId,
         lrl_event_name: eventName.slice(0, 100),
         lrl_event_type: eventType ?? undefined,
