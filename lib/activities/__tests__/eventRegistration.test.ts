@@ -112,12 +112,11 @@ describe('ingestEventRegistration', () => {
     expect(gaBody.events[0].params.lrl_utm_term).toBeUndefined();
     // the synthetic session: a page_view with the landing URL first, same client id + session id
     const gaCalls = f.mock.calls.filter((c: any) => String(c[0]).includes('google-analytics')).map((c: any) => JSON.parse(c[1].body));
-    expect(gaCalls).toHaveLength(2);
-    expect(gaCalls[0].events[0].name).toBe('page_view');
-    expect(gaCalls[0].events[0].params.page_location).toContain('utm_campaign=three-quotes');
-    expect(gaCalls[0].client_id).toBe(gaCalls[1].client_id);
-    expect(gaCalls[0].events[0].params.session_id).toBe(gaCalls[1].events[0].params.session_id);
-    expect(gaCalls[1].events[0].name).toBe('event_registration');
+    expect(gaCalls.map((b: any) => b.events[0].name)).toEqual(['campaign_details', 'page_view', 'event_registration']);
+    expect(gaCalls[0].events[0].params).toMatchObject({ source: 'linkedin', medium: 'social', campaign: 'three-quotes' });
+    expect(gaCalls[1].events[0].params.page_location).toContain('utm_campaign=three-quotes');
+    expect(new Set(gaCalls.map((b: any) => b.client_id)).size).toBe(1);
+    expect(new Set(gaCalls.map((b: any) => b.events[0].params.session_id)).size).toBe(1);
   });
 
   it('a registration with a real client id gets no synthetic page_view', async () => {

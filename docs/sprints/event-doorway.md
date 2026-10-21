@@ -20,6 +20,8 @@ event. The unpublished funnel "Event Doorway (GA tracking redirect)" and the GTM
   `lrl_utm_source / lrl_utm_medium / lrl_utm_campaign / lrl_utm_content / lrl_utm_term`.
 
 **Experiment (same day): synthetic session.** For fallback registrations the app first sends a
+`campaign_details` event (source / medium / campaign / term / content / campaign_id from the landing
+URL's UTMs — the shape Google's own MP docs use to set session campaign data), then a
 `page_view` whose `page_location` is the landing URL GHL stored (UTMs included), then the
 `event_registration`, both under the fallback client id and one fresh `session_id`. GA4 derives a
 session's source from its first page_view URL, so this may attribute natively — unsupported by
@@ -36,3 +38,9 @@ reports — GA4 cannot be told a traffic source for a server-sent event — but 
 Explorations once the `lrl_utm_*` params are registered as **custom dimensions** (Admin > Custom
 definitions; event-scoped; do this once). GHL's Attribution Report shows events by source natively
 either way, so UTMs on every event link remain the rule.
+
+
+**Zach (10-20 night): no custom definitions if avoidable** — the goal is events appearing in the SAME
+standard GA4 reports (Traffic acquisition, source/medium, campaign) as forms and bookings. The
+`lrl_utm_*` params stay as a free fallback but are not the plan. Test #1 (Coffee + Connect, no
+campaign_details) and test #2 (with campaign_details) decide it.

@@ -219,6 +219,23 @@ async function sendGa4EventWithSyntheticSession(
   const on = process.env.GA4_EVENT_SYNTHETIC_PAGEVIEW !== '0';
   if (!on || hit.reporter !== 'server-fallback' || !hit.landingUrl || !hit.clientId) return sendGa4Event(hit, opts);
   const sessionId = String(Math.floor((hit.occurredAt ?? new Date()).getTime() / 1000));
+  // Google's own Measurement Protocol example sets a session's traffic source with a
+  // `campaign_details` event (campaign_id / campaign / source / medium / term / content). Send it
+  // first, from the UTMs on the landing URL, so the session carries the same standard
+  // source / medium / campaign every browser-tagged session does — no custom definitions.
+  let qs: URLSearchParams | null = null;
+  try { qs = new URL(hit.landingUrl).searchParams; } catch { qs = null; }
+  const u = (k: string) => (qs?.get(k) ?? '').trim().slice(0, 100) || undefined;
+  if (u('utm_source') || u('utm_campaign')) {
+    const cd = await sendGa4Event({
+      clientId: hit.clientId,
+      sessionId,
+      name: 'campaign_details',
+      occurredAt: hit.occurredAt ? new Date(hit.occurredAt.getTime() - 3000) : undefined,
+      params: { campaign_id: u('utm_id'), campaign: u('utm_campaign'), source: u('utm_source'), medium: u('utm_medium'), term: u('utm_term'), content: u('utm_content') },
+    }, opts);
+    if (cd.status === 'failed') return cd;
+  }
   const pv = await sendGa4Event({
     clientId: hit.clientId,
     sessionId,
