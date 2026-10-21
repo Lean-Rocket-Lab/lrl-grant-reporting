@@ -19,6 +19,17 @@ event. The unpublished funnel "Event Doorway (GA tracking redirect)" and the GTM
 - The link's UTMs, as GHL captured them on the contact, ride along as event params
   `lrl_utm_source / lrl_utm_medium / lrl_utm_campaign / lrl_utm_content / lrl_utm_term`.
 
+**Experiment (same day): synthetic session.** For fallback registrations the app first sends a
+`page_view` whose `page_location` is the landing URL GHL stored (UTMs included), then the
+`event_registration`, both under the fallback client id and one fresh `session_id`. GA4 derives a
+session's source from its first page_view URL, so this may attribute natively — unsupported by
+Google's docs, hence an experiment. `GA4_EVENT_SYNTHETIC_PAGEVIEW=0` turns it off. Verify with one
+test registration from a UTM'd raw event link: GA4 Realtime "first user source" / Acquisition
+should show the UTM source instead of "(not set)".
+
+Why `lrl_utm_*` and not `utm_*`: GA4 only reads `utm_*` out of a page URL at session start; as
+event parameters they are just unknown custom params. The `lrl_` names say what they are.
+
 **What this means in GA4:** `event_registration` counts are complete. Registrations that came from
 a Wix click attribute natively. The rest show source/medium "(not set)" in standard Acquisition
 reports — GA4 cannot be told a traffic source for a server-sent event — but report by campaign in

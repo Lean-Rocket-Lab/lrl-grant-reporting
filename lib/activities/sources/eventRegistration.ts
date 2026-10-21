@@ -202,6 +202,34 @@ export function dateOnly(v: string | undefined): string | null {
 
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * EXPERIMENT (2026-10-20): for a registration GA4 has no browser session for (fallback id), send a
+ * synthetic `page_view` first whose `page_location` is the landing URL GHL stored — UTMs included —
+ * then the conversion, both under the same client id and a fresh session id. GA4 derives a session's
+ * source/medium/campaign from the first page_view's URL, so this MAY attribute the registration
+ * natively. Google documents Measurement-Protocol-only sessions as "(not set)", so this is
+ * unsupported behaviour that could stop working; the `lrl_utm_*` params remain the guaranteed
+ * baseline. GA4_EVENT_SYNTHETIC_PAGEVIEW=0 turns it off. Only used when reporter is server-fallback
+ * (a real client id already has a real session — do not pollute it).
+ */
+async function sendGa4EventWithSyntheticSession(
+  hit: Parameters<typeof sendGa4Event>[0] & { landingUrl?: string | null; reporter?: 'server' | 'server-fallback' },
+  opts: Parameters<typeof sendGa4Event>[1] = {},
+): Promise<Ga4Result> {
+  const on = process.env.GA4_EVENT_SYNTHETIC_PAGEVIEW !== '0';
+  if (!on || hit.reporter !== 'server-fallback' || !hit.landingUrl || !hit.clientId) return sendGa4Event(hit, opts);
+  const sessionId = String(Math.floor((hit.occurredAt ?? new Date()).getTime() / 1000));
+  const pv = await sendGa4Event({
+    clientId: hit.clientId,
+    sessionId,
+    name: 'page_view',
+    occurredAt: hit.occurredAt ? new Date(hit.occurredAt.getTime() - 2000) : undefined,
+    params: { page_location: hit.landingUrl.slice(0, 1000), page_title: 'GHL Event page (server-reported)', lrl_reporter: 'server-fallback' },
+  }, opts);
+  if (pv.status === 'failed') return pv;
+  return sendGa4Event({ ...hit, sessionId }, opts);
+}
+
 const utm = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 100) : undefined);
 
 /** Which GA4 identity an event registration is reported under, and how it was obtained. */
@@ -270,13 +298,15 @@ export async function ingestEventRegistration(
   const fetchImpl = opts.fetchImpl;
 
   const [ga4, linkedin] = await Promise.all([
-    sendOnce('ga4', eventKey, () => sendGa4Event({
+    sendOnce('ga4', eventKey, () => sendGa4EventWithSyntheticSession({
       // GHL stores null here for event registrations (no GA tag on Events pages). In order: the `_gl`
       // linker from a Wix click, then — unless GA4_EVENT_FALLBACK=0 — a stable per-contact pseudo id
       // so the registration is at least COUNTED (source "(not set)"; tagged server-fallback so
       // reports can exclude it). The link's UTMs ride along as custom params (below).
       clientId: ga.clientId,
       sessionId: ga.sessionId,
+      reporter: ga.reporter,
+      landingUrl: attr.url ?? contact.firstAttribution?.url ?? null,
       name: GA4_EVENT_NAME,
       occurredAt: registeredAt,
       // No personal data — ids and names of the EVENT only.

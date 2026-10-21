@@ -105,11 +105,27 @@ describe('ingestEventRegistration', () => {
     const f = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({}), text: async () => '' })) as any;
     const r = await ingestEventRegistration({ contactId: CONTACT.id, eventId: 'ev9', eventName: 'Three Quotes' }, { client: fakeClient, fetchImpl: f });
     expect(r.conversions?.ga4.status).toBe('sent');
-    const ga = f.mock.calls.find((c: any) => String(c[0]).includes('google-analytics'));
-    const gaBody = JSON.parse(ga[1].body);
+    const gaReg = f.mock.calls.filter((c: any) => String(c[0]).includes('google-analytics')).map((c: any) => JSON.parse(c[1].body)).find((b: any) => b.events[0].name === 'event_registration');
+    const gaBody = gaReg;
     expect(gaBody.client_id).toMatch(/^\d{10}\.\d{10}$/);
     expect(gaBody.events[0].params).toMatchObject({ lrl_reporter: 'server-fallback', lrl_utm_source: 'linkedin', lrl_utm_medium: 'social', lrl_utm_campaign: 'three-quotes' });
     expect(gaBody.events[0].params.lrl_utm_term).toBeUndefined();
+    // the synthetic session: a page_view with the landing URL first, same client id + session id
+    const gaCalls = f.mock.calls.filter((c: any) => String(c[0]).includes('google-analytics')).map((c: any) => JSON.parse(c[1].body));
+    expect(gaCalls).toHaveLength(2);
+    expect(gaCalls[0].events[0].name).toBe('page_view');
+    expect(gaCalls[0].events[0].params.page_location).toContain('utm_campaign=three-quotes');
+    expect(gaCalls[0].client_id).toBe(gaCalls[1].client_id);
+    expect(gaCalls[0].events[0].params.session_id).toBe(gaCalls[1].events[0].params.session_id);
+    expect(gaCalls[1].events[0].name).toBe('event_registration');
+  });
+
+  it('a registration with a real client id gets no synthetic page_view', async () => {
+    process.env.GA4_MEASUREMENT_ID = 'G-TEST'; process.env.GA4_API_SECRET = 's';
+    const f = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({}), text: async () => '' })) as any;
+    await ingestEventRegistration({ contactId: CONTACT.id, eventId: 'ev10', eventName: 'X' }, { client: fakeClient, fetchImpl: f });
+    const gaCalls = f.mock.calls.filter((c: any) => String(c[0]).includes('google-analytics'));
+    expect(gaCalls).toHaveLength(1);
   });
 
   it('skips without an event identity or a contact', async () => {
