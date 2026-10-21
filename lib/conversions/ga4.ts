@@ -87,20 +87,6 @@ export function gaSessionIdFromLinker(url: string | null | undefined): string | 
 }
 
 /**
- * GA ids stamped by the LRL event doorway page (`go.leanrocketlab.org/e`), which runs the Google tag
- * and forwards to the untaggable GHL Events page with `lrl_ga=<client id>&lrl_gs=<session id>`.
- * Plain params, no hash — we set them ourselves. See docs/sprints/event-doorway.md.
- */
-export function gaIdsFromDoorway(url: string | null | undefined): { clientId: string | null; sessionId: string | null } {
-  if (!url) return { clientId: null, sessionId: null };
-  let qs: URLSearchParams;
-  try { qs = new URL(url).searchParams; } catch { qs = new URLSearchParams(String(url).split('?')[1]?.split('#')[0] ?? ''); }
-  const clientId = normalizeGaClientId(qs.get('lrl_ga'));
-  const gs = (qs.get('lrl_gs') ?? '').trim();
-  return { clientId, sessionId: /^\d{9,11}$/.test(gs) ? gs : null };
-}
-
-/**
  * A STABLE pseudo client id for a contact, for conversions that happened where no GA tag could run
  * (GHL Events pages reached from a bare link). GA4 then counts the conversion — under a user with
  * no session history, so source/medium report "(not set)". That is the honest trade: a counted,

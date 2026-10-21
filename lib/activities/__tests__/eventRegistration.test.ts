@@ -99,6 +99,19 @@ describe('ingestEventRegistration', () => {
     expect(input.values.activity_notes).toMatch(/Event type not determinable/);
   });
 
+  it('an untagged registration (no GA client id) is still sent under the fallback id with the link UTMs as params', async () => {
+    process.env.GA4_MEASUREMENT_ID = 'G-TEST'; process.env.GA4_API_SECRET = 's';
+    mockContact.mockResolvedValue({ ...CONTACT, lastAttribution: { gaClientId: null, url: 'https://go.leanrocketlab.org/events/event-details/6ac6a0a2e02207e0884dfb9e?utm_source=linkedin&utm_medium=social&utm_campaign=three-quotes', utmSource: 'linkedin', utmMedium: 'social', campaign: 'three-quotes' } });
+    const f = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({}), text: async () => '' })) as any;
+    const r = await ingestEventRegistration({ contactId: CONTACT.id, eventId: 'ev9', eventName: 'Three Quotes' }, { client: fakeClient, fetchImpl: f });
+    expect(r.conversions?.ga4.status).toBe('sent');
+    const ga = f.mock.calls.find((c: any) => String(c[0]).includes('google-analytics'));
+    const gaBody = JSON.parse(ga[1].body);
+    expect(gaBody.client_id).toMatch(/^\d{10}\.\d{10}$/);
+    expect(gaBody.events[0].params).toMatchObject({ lrl_reporter: 'server-fallback', lrl_utm_source: 'linkedin', lrl_utm_medium: 'social', lrl_utm_campaign: 'three-quotes' });
+    expect(gaBody.events[0].params.lrl_utm_term).toBeUndefined();
+  });
+
   it('skips without an event identity or a contact', async () => {
     expect((await ingestEventRegistration({ contactId: CONTACT.id }, { client: fakeClient })).reason).toBe('no-event');
     mockContact.mockResolvedValue(null);
@@ -167,15 +180,14 @@ describe('live payload regressions (2026-10-19)', () => {
   });
 });
 
-describe('resolveEventGaIds (event doorway + fallback)', async () => {
+describe('resolveEventGaIds (fallback)', async () => {
   const { resolveEventGaIds } = await import('../sources/eventRegistration');
   const { fallbackGaClientId } = await import('../../conversions/ga4');
-  const DOOR = 'https://go.leanrocketlab.org/events/event-details/6ac6a0a2e02207e0884dfb9e?utm_source=linkedin&lrl_ga=1891538222.1792502755&lrl_gs=1792502755';
-  const BARE = 'https://go.leanrocketlab.org/events/event-details/6ac6a0a2e02207e0884dfb9e';
-  it('prefers the doorway ids and reports as server', () => {
-    expect(resolveEventGaIds('c1', { url: DOOR, gaClientId: null }, null)).toEqual({ clientId: '1891538222.1792502755', sessionId: '1792502755', reporter: 'server' });
+  const BARE = 'https://go.leanrocketlab.org/events/event-details/6ac6a0a2e02207e0884dfb9e?utm_source=linkedin';
+  it('uses the stored client id when GHL has one', () => {
+    expect(resolveEventGaIds('c1', { url: BARE, gaClientId: 'GA1.1.1.2' }, null)).toMatchObject({ clientId: 'GA1.1.1.2', reporter: 'server' });
   });
-  it('falls back to a stable per-contact id for a bare arrival, tagged server-fallback', () => {
+  it('falls back to a stable per-contact id for an untagged arrival, tagged server-fallback', () => {
     const r = resolveEventGaIds('kdVDU7oACLAEPQs8aedV', { url: BARE, gaClientId: null }, null);
     expect(r.reporter).toBe('server-fallback');
     expect(r.clientId).toMatch(/^\d{10}\.\d{10}$/);

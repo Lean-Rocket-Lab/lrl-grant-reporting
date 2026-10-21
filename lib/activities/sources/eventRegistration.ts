@@ -28,7 +28,7 @@ import { GhlClient, ghl } from '../../ghl/client';
 import { getContact } from '../../ghl/contacts';
 import { upsertActivity, type UpsertActivityResult } from '../upsert';
 import type { CreateActivityOptions } from '../create';
-import { sendGa4Event, gaClientIdFromLinker, gaSessionIdFromLinker, gaIdsFromDoorway, fallbackGaClientId, type Ga4Result } from '../../conversions/ga4';
+import { sendGa4Event, gaClientIdFromLinker, gaSessionIdFromLinker, fallbackGaClientId, type Ga4Result } from '../../conversions/ga4';
 import { sendLinkedInConversion, liFatIdFromUrl, type LinkedInResult } from '../../conversions/linkedin';
 import { sendOnce } from '../../conversions/ledger';
 
@@ -202,6 +202,8 @@ export function dateOnly(v: string | undefined): string | null {
 
 // ---------------------------------------------------------------------------------------------
 
+const utm = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 100) : undefined);
+
 /** Which GA4 identity an event registration is reported under, and how it was obtained. */
 export function resolveEventGaIds(
   contactId: string,
@@ -209,9 +211,7 @@ export function resolveEventGaIds(
   first: any,
   fallbackEnabled = process.env.GA4_EVENT_FALLBACK !== '0',
 ): { clientId: string | null; sessionId: string | null; reporter: 'server' | 'server-fallback' } {
-  const door = gaIdsFromDoorway(attr?.url);
-  if (attr?.gaClientId) return { clientId: attr.gaClientId, sessionId: attr.gaSessionId ?? door.sessionId ?? gaSessionIdFromLinker(attr.url), reporter: 'server' };
-  if (door.clientId) return { clientId: door.clientId, sessionId: door.sessionId, reporter: 'server' };
+  if (attr?.gaClientId) return { clientId: attr.gaClientId, sessionId: attr.gaSessionId ?? gaSessionIdFromLinker(attr.url), reporter: 'server' };
   const linked = gaClientIdFromLinker(attr?.url) ?? gaClientIdFromLinker(first?.url);
   if (linked) return { clientId: linked, sessionId: gaSessionIdFromLinker(attr?.url) ?? gaSessionIdFromLinker(first?.url), reporter: 'server' };
   if (fallbackEnabled) return { clientId: fallbackGaClientId(contactId), sessionId: null, reporter: 'server-fallback' };
@@ -271,10 +271,10 @@ export async function ingestEventRegistration(
 
   const [ga4, linkedin] = await Promise.all([
     sendOnce('ga4', eventKey, () => sendGa4Event({
-      // GHL stores null here for event registrations (no GA tag on Events pages). In order: the ids
-      // stamped by the event doorway page (lrl_ga/lrl_gs), the `_gl` linker from a Wix click, and
-      // finally — unless GA4_EVENT_FALLBACK=0 — a stable per-contact pseudo id so the registration
-      // is at least COUNTED (source "(not set)"; tagged server-fallback so reports can exclude it).
+      // GHL stores null here for event registrations (no GA tag on Events pages). In order: the `_gl`
+      // linker from a Wix click, then — unless GA4_EVENT_FALLBACK=0 — a stable per-contact pseudo id
+      // so the registration is at least COUNTED (source "(not set)"; tagged server-fallback so
+      // reports can exclude it). The link's UTMs ride along as custom params (below).
       clientId: ga.clientId,
       sessionId: ga.sessionId,
       name: GA4_EVENT_NAME,
@@ -282,6 +282,15 @@ export async function ingestEventRegistration(
       // No personal data — ids and names of the EVENT only.
       params: {
         lrl_reporter: ga.reporter,
+        // The link's UTMs, as GHL captured them on the contact. GA4 cannot be told a traffic source
+        // for a server-sent event (it reads that from the browser's session, which an untagged
+        // Events page never had), so these ride along as custom params → register them as
+        // custom dimensions and events report by campaign in Explorations.
+        lrl_utm_source: utm(attr.utmSource),
+        lrl_utm_medium: utm(attr.utmMedium),
+        lrl_utm_campaign: utm(attr.campaign),
+        lrl_utm_content: utm(attr.utmContent),
+        lrl_utm_term: utm(attr.utmTerm),
         lrl_event_id: input.eventId,
         lrl_event_name: eventName.slice(0, 100),
         lrl_event_type: eventType ?? undefined,
