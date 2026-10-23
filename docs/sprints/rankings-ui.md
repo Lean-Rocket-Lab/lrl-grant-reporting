@@ -1,6 +1,6 @@
 # Sprint brief: Rankings — drag-and-drop page ranking for Profiles
 
-**Status:** NOT STARTED (brief written 2026-10-23). Build in this repo (lrl-grant-reporting, Next.js pages router).
+**Status:** BUILT + verified live 2026-10-23 (`c892ae5`; see PROJECT_STATE.md). Brief written 2026-10-23. Build in this repo (lrl-grant-reporting, Next.js pages router).
 **Goal:** Zach reorders who appears first on each website page by dragging, and the app writes the
 `rank_*` fields on GHL Profiles. The live site (leanrocketlab.org, GHL) already sorts by these fields.
 

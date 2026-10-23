@@ -241,6 +241,28 @@ Wix Clients had no collective data).
 - ⚠️ Option key drift: `business.website_programs` has `exit_readiness`; Profiles/Resources `programs` have
   `exit_readiness_accelerator`. No company holds either yet. The directory slug table must map both (or align them).
 
+## ✅ 2026-10-23 — Rankings page BUILT (`/rankings`): drag-and-drop `rank_*` ordering for Profiles
+
+Spec: `docs/sprints/rankings-ui.md`. Commit `c892ae5`. 11 placements in ONE table,
+`lib/rankings/placements.ts`: Team / EIRs / Board / Resources directory pages (one list each), plus the 7
+program and collective pages (separate People and Resources lists in the same field). Adding a page = one row + one field.
+- **Save = `POST /api/rankings`.** The pure planner `lib/rankings/plan.ts` gives ranked ids 1..n and clears
+  in-scope profiles that were dropped from the list. Only changed records are written, so an untouched save is
+  a no-op. Profiles outside the shown statuses (hidden etc.) are **never cleared**. Sets go through
+  `writeRecordFields`; clears `PUT {<field>: null}` (never `''`). Every write is read back with a direct GET.
+  All calls are paced ≥0.3 s. The route is behind default-deny (not in `SELF_ENFORCING`).
+- **Search lag handled:** the page sends its baseline ranks. Where the (≈12 s stale) search disagrees, a direct
+  GET decides before planning. The page updates from the POST response, never from a re-fetch.
+- **Verified live 2026-10-23** on the Team page: swapped Alex Masten (3) and Zach Kraabel (4). The save reported 2 updated,
+  4 unchanged, 0 skipped, and a direct GET confirmed 4/3. Restoring reported 2 updated, and a direct GET confirmed the original 1–6.
+  Re-saving the same order: **0 writes, 6 unchanged.** The live CLEAR path (null) is covered by unit tests only;
+  the first real "Remove" will be its first live run.
+- Live list sizes (published): Team 6 (all ranked) · EIRs 33 · Board 9 · Resources 93 (all three new fields blank) ·
+  LOCAL 28 people / 36 resources.
+- ⬜ Site side (Zach): the Resources, EIRs and Board pages must sort by `rank_resources` / `rank_eir` / `rank_board`.
+- ⬜ The deployed page has not been clicked through in a browser yet (staff login needed). Typecheck is clean, and 13 rankings
+  tests pass. The suite's one red test, `lib/conversions/__tests__/site.test.ts` "learns the form id…", was already failing before this change.
+
 ## ✅ 2026-10-23 — Resources MERGED INTO PROFILES (data live + verified; DEPLOYED 6df0905)
 
 Spec: `docs/sprints/profiles-resources-merge.md`. Zach: one directory object before the new site launches.
