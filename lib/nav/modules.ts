@@ -18,6 +18,7 @@ export const MODULES: ModuleItem[] = [
   { id: 'enrichment', label: 'Data Enrichment', icon: 'fa-wand-magic-sparkles', href: '/enrichment' },
   { id: 'change-logs', label: 'Change Logs', icon: 'fa-clipboard-list', href: '/change-logs' },
   { id: 'readiness', label: 'Readiness Map', icon: 'fa-chart-simple', href: '/readiness-map' },
+  { id: 'rankings', label: 'Rankings', icon: 'fa-arrow-down-1-9', href: '/rankings' },
   { id: 'grants', label: 'Grant Reporting', icon: 'fa-file-invoice-dollar', soon: true },
   { id: 'settings', label: 'Settings', icon: 'fa-gear', soon: true },
 ];
