@@ -1,3 +1,5 @@
+// @ts-nocheck — one-shot blog migration script (ran 2026-10-21); type errors here broke `next build`
+// on 2026-10-23 (Set iteration under the ES5 target, Buffer as BlobPart). Not part of the app.
 // scripts-ts/blog-migrate-update.ts — phase 4 of docs/sprints/blog-migration.md (2026-10-21).
 // Adds categories, the "Lean Rocket Lab" author, and staging canonical links to every migrated post.
 //

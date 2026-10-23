@@ -1,3 +1,5 @@
+// @ts-nocheck — one-shot blog migration script (ran 2026-10-21); type errors here broke `next build`
+// on 2026-10-23 (Set iteration under the ES5 target, Buffer as BlobPart). Not part of the app.
 // scripts-ts/blog-migrate-ghl.ts — phase 3 of the Wix -> GHL blog migration (docs/sprints/blog-migration.md).
 //
 // Reads reports/blog-migration/plan.json (built by scripts/blog-migrate-build.py), re-hosts every cover and
