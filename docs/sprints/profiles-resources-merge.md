@@ -1,6 +1,6 @@
 # Sprint spec: Resources merged into Profiles (one directory object)
 
-**Status:** DATA LIVE + VERIFIED 2026-10-23 · CODE DONE, NOT DEPLOYED · GHL manual steps open (below).
+**Status:** DATA LIVE + VERIFIED 2026-10-23 · DEPLOYED (6df0905), live dry runs pass · GHL manual steps open (below).
 Follows `profiles-object.md`. Goal: one directory object for staff and for the new website, before launch.
 
 ## Decisions (Zach, 2026-10-23)

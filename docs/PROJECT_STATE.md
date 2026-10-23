@@ -241,7 +241,7 @@ Wix Clients had no collective data).
 - ⚠️ Option key drift: `business.website_programs` has `exit_readiness`; Profiles/Resources `programs` have
   `exit_readiness_accelerator`. No company holds either yet. The directory slug table must map both (or align them).
 
-## ✅ 2026-10-23 — Resources MERGED INTO PROFILES (data live + verified; code NOT deployed)
+## ✅ 2026-10-23 — Resources MERGED INTO PROFILES (data live + verified; DEPLOYED 6df0905)
 
 Spec: `docs/sprints/profiles-resources-merge.md`. Zach: one directory object before the new site launches.
 - **Profiles** now hold people (`profile_type=person`, 47) AND resources (`profile_type=resource`, 94). Folders:
@@ -255,7 +255,8 @@ Spec: `docs/sprints/profiles-resources-merge.md`. Zach: one directory object bef
   "Resources → Wix Resources" set disabled in Postgres; nightly Wix step removed.
 - Code: resource-tagger → Profiles; new `/api/profile-sync` + `lib/profiles/pipeline.ts`; `/api/resource-sync` retired;
   referral picker + referral links → profiles. 810/810 tests.
-- ⬜ **Zach:** deploy · create "Profile Changed" workflow → `/api/profile-sync` · turn OFF "Resource Changed" ·
+- ✅ Deployed 6df0905; live dry runs of `/api/profile-sync` passed for a resource (resource-tagger, company already linked) and a person (profile-tagger); no-secret call → 401.
+- ⬜ **Zach:** create "Profile Changed" workflow → `/api/profile-sync` · turn OFF "Resource Changed" ·
   rebuild "Become a Resource" form on Profiles · hide the archived object · link the 50 unlinked by hand.
   Until the deploy, the LIVE app still runs the old resource-sync; it is harmless now (tagger row + Wix set disabled).
 
