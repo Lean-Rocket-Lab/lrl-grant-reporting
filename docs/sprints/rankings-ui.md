@@ -7,7 +7,10 @@
 ## Placements (one NUMERICAL field per page on `custom_objects.profiles`)
 | Placement (UI label) | Field | Who is listed |
 |---|---|---|
-| Our Team | `rank_our_team` | people with `roles` ∋ `team` |
+| Team page | `rank_our_team` | people with `roles` ∋ `team` |
+| EIRs page | `rank_eir` | people with `roles` ∋ `eir` |
+| Board page | `rank_board` | people with `roles` ∋ `board` |
+| Resources page | `rank_resources` | every resource profile (`profile_type = resource`) |
 | LOCAL | `rank_local` | `programs` ∋ `local` |
 | Sales & Marketing Accelerator | `rank_sama` | `programs` ∋ `sales_and_marketing_accelerator` |
 | ManuTech Incubator | `rank_manutech` | `programs` ∋ `manutech_incubator` |
@@ -16,13 +19,14 @@
 | Mainstreet | `rank_mainstreet` | `collectives` ∋ `mainstreet` |
 | Manufacturing Tech | `rank_manufacturing` | `collectives` ∋ `manufacturing` |
 
-- Every placement except Our Team has two lists, **People** (`profile_type = person`) and **Resources**
+- The four directory pages (Team, EIRs, Board, Resources) have ONE list each. Someone on Team AND
+  Board (Brandon Marken, Ken Seneff) appears on both lists and is ranked separately on each.
+- Every program and collective placement has two lists, **People** (`profile_type = person`) and **Resources**
   (`profile_type = resource`). They rank independently: the site shows them in separate tabs, so both
   lists are numbered 1..n in the same field.
 - Show only `profile_status = published` by default; a toggle to include approved/pending is a nice-to-have.
-- **"Overall" (unscoped directory pages):** there is no field yet. If Zach wants it, create
-  `rank_overall` (NUMERICAL, folder "Page Ranking" `Yo0DNfBKHOjxx92IsmGM`) and tell him the site's
-  unscoped Team and Resources pages must sort by it. Confirm with Zach before creating it.
+- `rank_resources`, `rank_eir`, `rank_board` were CREATED 2026-10-23 (all blank). The website's
+  Resources, EIRs and Board pages must be updated to sort by them (Zach is handling the site side).
 - Put the placement table in ONE module (`lib/rankings/placements.ts`) so adding a page = one row + one field.
 - Membership values are option KEYS (multi-selects come back as arrays of keys from the object search).
 
