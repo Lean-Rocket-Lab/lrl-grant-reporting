@@ -81,11 +81,19 @@ function extractRecordId(req: NextApiRequest): { id?: string; via?: string } {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (req.method !== 'POST') {
+    console.warn('[profile-sync] rejected 405', { method: req.method });
+    return res.status(405).json({ error: 'POST only' });
+  }
 
   const secret = process.env.WIX_SYNC_WEBHOOK_SECRET;
   const provided = (req.headers['x-webhook-secret'] as string) || (req.query.secret as string);
-  if (!secret || provided !== secret) return res.status(401).json({ error: 'unauthorized' });
+  // Log every rejection (never the secret): a GHL workflow that gets a 401/400 otherwise leaves no
+  // trace in the Vercel runtime log, which is how the first live test on 2026-10-23 went unseen.
+  if (!secret || provided !== secret) {
+    console.warn('[profile-sync] rejected 401', { hasHeader: Boolean(req.headers['x-webhook-secret']), hasQuerySecret: Boolean(req.query.secret), query: Object.keys(req.query) });
+    return res.status(401).json({ error: 'unauthorized' });
+  }
 
   // ?echo=1 — diagnostic: report exactly what GHL sent, run nothing. Use this once from the GHL
   // workflow to discover the real payload shape, then remove the flag.
@@ -104,6 +112,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { id: recordId, via } = extractRecordId(req);
   if (!recordId) {
     // Say what arrived, so a bad merge field is obvious instead of a bare 400.
+    console.warn('[profile-sync] rejected 400: no record id', { query: req.query, bodyKeys: Object.keys((req.body as any) ?? {}) });
     return res.status(400).json({
       error: 'recordId required — no record id found in the payload',
       hint: 'Re-send with ?echo=1 to see the payload GHL delivered, then map the right field.',
