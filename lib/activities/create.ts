@@ -41,7 +41,9 @@ export const REFERRED_TO_KEY = 'referral_received_referred_to';
 export const REFERRED_TO_KEYS: Record<ReferredToKind, string> = {
   Contact: REFERRED_TO_KEY,
   Company: 'referral_referred_to_company',
-  Resource: 'referral_referred_to_resource',
+  // Resources moved onto Profiles 2026-10-23; the old referral_referred_to_resource definition is
+  // permanent but archived (its 1 relation was carried to this one by profiles-from-resources.ts).
+  Resource: 'referral_referred_to_profile',
 };
 
 export interface ActivityLinkResult {

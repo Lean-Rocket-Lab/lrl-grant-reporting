@@ -43,13 +43,41 @@ export const DEFAULT_ENRICHER_CONFIGS: Record<string, EnricherConfig> = {
       },
     ],
   },
-  // Resources: credit-gate on resource_status = Approved (no membership dimension — Resources are orgs).
-  'resource-tagger::custom_objects.resources': {
+  // Resource profiles (2026-10-23): Resources moved onto custom_objects.profiles with
+  // profile_type = Resource (docs/sprints/profiles-resources-merge.md). The old
+  // 'resource-tagger::custom_objects.resources' key is retired with the archived object; a stored row
+  // under that key is simply never read again. Approved AND Published, like the person tagger: the
+  // migrated resources arrived Published, and the tagger is equality-guarded so a re-run is a noop.
+  'resource-tagger::custom_objects.profiles': {
     enricher: 'resource-tagger',
-    sourceObject: 'custom_objects.resources',
+    sourceObject: 'custom_objects.profiles',
     enabled: true,
     combine: 'AND',
-    groups: [{ combine: 'AND', filters: [{ field: 'custom_objects.resources.resource_status', anyOf: ['Approved'] }] }],
+    groups: [{
+      combine: 'AND',
+      filters: [
+        { field: 'custom_objects.profiles.profile_type', anyOf: ['Resource'] },
+        { field: 'custom_objects.profiles.profile_status', anyOf: ['Approved', 'Published'] },
+      ],
+    }],
+  },
+  // Profiles (2026-10-22): the readiness tagger for PERSON profiles. Same membership rule the
+  // contact tagger had (Board-only profiles are not coaches, so they get no stops), and it runs on
+  // Published as well as Approved because the 44 migrated profiles arrived already Published.
+  // profile_type = Person (2026-10-23) keeps it off resource profiles, which have no roles anyway.
+  'profile-tagger::custom_objects.profiles': {
+    enricher: 'profile-tagger',
+    sourceObject: 'custom_objects.profiles',
+    enabled: true,
+    combine: 'AND',
+    groups: [{
+      combine: 'AND',
+      filters: [
+        { field: 'custom_objects.profiles.profile_type', anyOf: ['Person'] },
+        { field: 'custom_objects.profiles.profile_status', anyOf: ['Approved', 'Published'] },
+        { field: 'custom_objects.profiles.roles', anyOf: ['Team', 'EIR'] },
+      ],
+    }],
   },
   /**
    * Grant reason: the gate is what makes this safe to leave on.

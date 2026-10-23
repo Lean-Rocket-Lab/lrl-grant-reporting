@@ -24,7 +24,10 @@ import type { Portfolio, PortfolioRow, Scale } from '@/lib/stage/portfolio';
 interface ScaleDef { key: Scale; label: string; full: string; max: number; tick: (n: number) => string }
 
 const SCALE_DEFS: ScaleDef[] = [
-  { key: 'churchill', label: 'Churchill', full: 'Churchill stage of growth', max: 5, tick: (n) => `Stage ${n}` },
+  { key: 'msrl', label: 'MSRL', full: 'Main Street readiness (lowest of Demand, Model, Operations)', max: 9, tick: (n) => `MSRL ${n}` },
+  { key: 'msrl_demand', label: 'MSRL Demand', full: 'Main Street readiness: Demand dimension', max: 9, tick: (n) => `D${n}` },
+  { key: 'msrl_model', label: 'MSRL Model', full: 'Main Street readiness: Model dimension (money per sale, month, year)', max: 9, tick: (n) => `M${n}` },
+  { key: 'msrl_operations', label: 'MSRL Operations', full: 'Main Street readiness: Operations dimension', max: 9, tick: (n) => `O${n}` },
   { key: 'trl', label: 'TRL', full: 'Technology readiness', max: 9, tick: (n) => `TRL ${n}` },
   { key: 'mrl', label: 'MRL', full: 'Manufacturing readiness', max: 10, tick: (n) => `MRL ${n}` },
   { key: 'crl', label: 'CRL', full: 'Customer readiness', max: 9, tick: (n) => `CRL ${n}` },
@@ -103,7 +106,7 @@ interface TipState { row: PortfolioRow; x: number; y: number }
 export default function ReadinessMapPage() {
   const [data, setData] = useState<Portfolio | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [scaleKey, setScaleKey] = useState<Scale>('churchill');
+  const [scaleKey, setScaleKey] = useState<Scale>('msrl');
   const [view, setView] = useState<ViewKey>('map');
   const [path, setPath] = useState('all');
   const [rescoredOnly, setRescoredOnly] = useState(false);
@@ -551,7 +554,10 @@ function Tooltip({ state }: { state: TipState }) {
             <td />
             <td style={{ ...tdStyle, color: SLATE, fontSize: 10.5 }}>Now</td>
           </tr>
-          {line('Churchill', 'churchill')}
+          {line('MSRL', 'msrl')}
+          {line('Demand', 'msrl_demand')}
+          {line('Model', 'msrl_model')}
+          {line('Operations', 'msrl_operations')}
           {line('TRL', 'trl')}
           {line('MRL', 'mrl')}
           {line('CRL', 'crl')}
@@ -581,7 +587,7 @@ function DataTable({ rows }: { rows: PortfolioRow[] }) {
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
           <thead>
             <tr>
-              {['Company', 'Path', 'Churchill', 'TRL', 'MRL', 'CRL', 'Stages moved', 'Snapshots'].map((h, i) => (
+              {['Company', 'Path', 'MSRL', 'MSRL now', 'TRL', 'MRL', 'CRL', 'Stages moved', 'Snapshots'].map((h, i) => (
                 <th key={h} style={{ ...labelStyle, textAlign: i === 0 ? 'left' : 'right', padding: '6px 10px', borderTop: `1px solid ${GRAY_300}`, background: GRAY_100, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -591,7 +597,8 @@ function DataTable({ rows }: { rows: PortfolioRow[] }) {
               <tr key={d.companyId}>
                 <td style={{ ...cellStyle, textAlign: 'left', minWidth: 170, whiteSpace: 'normal', color: INK }}>{d.name}</td>
                 <td style={cellStyle}>{pathLabel(d.businessModel) ?? '–'}</td>
-                <td style={cellStyle}>{pair(d.scores.churchill)}</td>
+                <td style={cellStyle}>{pair(d.scores.msrl)}</td>
+                <td style={cellStyle}>{d.msrlLabel ?? '–'}</td>
                 <td style={cellStyle}>{pair(d.scores.trl)}</td>
                 <td style={cellStyle}>{pair(d.scores.mrl)}</td>
                 <td style={cellStyle}>{pair(d.scores.crl)}</td>

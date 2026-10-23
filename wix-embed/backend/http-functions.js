@@ -33,6 +33,7 @@ const FIELDS = {
   trl: 'trlStops',
   crl: 'crlStops',
   irl: 'investorReadinessStops',
+  msrl: 'msrlStops',
 };
 
 /* Resources (Technical Assistance Providers) collection = `Import1`. Same readiness columns as Team
@@ -50,6 +51,7 @@ const RES_FIELDS = {
   trl: 'trlStops',
   crl: 'crlStops',
   irl: 'investorReadinessStops',
+  msrl: 'msrlStops',
 };
 
 /* Convert a Wix media URI (wix:image://v1/<id>~mv2.<ext>/<file>#...) to a public static URL so
@@ -84,6 +86,7 @@ function toProvider(m) {
       TRL: stopArray(m[FIELDS.trl]),
       CRL: stopArray(m[FIELDS.crl]),
       IRL: stopArray(m[FIELDS.irl]),
+      MSRL: stopArray(m[FIELDS.msrl]),
     },
   };
 }
@@ -104,6 +107,7 @@ function toTapProvider(m) {
       TRL: stopArray(m[RES_FIELDS.trl]),
       CRL: stopArray(m[RES_FIELDS.crl]),
       IRL: stopArray(m[RES_FIELDS.irl]),
+      MSRL: stopArray(m[RES_FIELDS.msrl]),
     },
   };
 }
@@ -117,7 +121,7 @@ const JSON_HEADERS = {
 
 /** True when a provider is placed on at least one line (tagged) — hides untagged rows. */
 function isPlaced(p) {
-  return p.stops.MRL.length || p.stops.TRL.length || p.stops.CRL.length || p.stops.IRL.length;
+  return p.stops.MRL.length || p.stops.TRL.length || p.stops.CRL.length || p.stops.IRL.length || p.stops.MSRL.length;
 }
 
 export async function get_providers(request) {

@@ -75,7 +75,7 @@ export default function ChangeLogsPage({ rows, hasMore, page, actors, f }: Props
         <form method="GET" action="/change-logs" style={{ ...card, padding: 14, display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 260px', minWidth: 200 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>Search (record, field, rationale, value)</span>
-            <input name="q" defaultValue={f.q} placeholder="e.g. country, Litty Fit, churchill…" style={inputBase} />
+            <input name="q" defaultValue={f.q} placeholder="e.g. country, Litty Fit, msrl…" style={inputBase} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-500)' }}>Actor</span>

@@ -18,14 +18,15 @@ function stageCatalog(): CustomFieldCatalog {
   const byKey: Record<string, CustomFieldDef> = {
     [`${STAGE_OBJECT}.rescore_method`]: mk(`${STAGE_OBJECT}.rescore_method`, ['AI', 'Staff', 'AI+Override']),
     [`${STAGE_OBJECT}.snapshot_kind`]: mk(`${STAGE_OBJECT}.snapshot_kind`, ['Initial', 'Rescore', 'Current']),
-    [`${STAGE_OBJECT}.churchill_substage`]: mk(`${STAGE_OBJECT}.churchill_substage`, ['III-D', 'III-G', 'N/A']),
+    [`${STAGE_OBJECT}.msrl_path`]: mk(`${STAGE_OBJECT}.msrl_path`, ['Sustain', 'Grow']),
   };
   return { fields: Object.values(byKey), folders: [], byKey, byId: {} };
 }
 
 const techScore: StageScore = { path: 'tech', trl: 4, mrl: 3, crl: 5, techRationale: 'Stage Scoring — Tech Path\nTRL = 4', rescore: false, model: 'm' };
 const bothRescore: StageScore = {
-  path: 'both', trl: 6, mrl: 2, crl: 4, churchillStage: 3, churchillSubstage: 'III-G',
+  path: 'both', trl: 6, mrl: 2, crl: 4, msrl: 3, msrlDemand: 3, msrlModel: 5, msrlOperations: 4, msrlPath: 'G',
+  msrlLens: 'Projects and trades', msrlOpenFlags: ['P3'], msrlLabel: 'MSRL 3-G (D3 / M5 / O4)', msrlNextMilestone: 'Reach 90 in-season days',
   techRationale: 'tech note', serviceRationale: 'service note', rescore: true, model: 'm',
 };
 
@@ -41,23 +42,24 @@ describe('joinRationale', () => {
 describe('buildStageProperties', () => {
   const cat = stageCatalog();
 
-  it('writes an Initial snapshot with AI method + scores, no churchill on tech path', () => {
+  it('writes an Initial snapshot with AI method + scores, no msrl on tech path', () => {
     const p = buildStageProperties({ score: techScore, name: 'Acme', rescoreDate: '2026-07-31' }, cat);
     expect(p.snapshot_kind).toBe('Initial');
     expect(p.rescore_method).toBe('AI');
     expect(p.rescore_date).toBe('2026-07-31T00:00:00Z');
     expect(p.trl).toBe(4);
-    expect(p.churchill_score).toBeUndefined();
+    expect(p.msrl).toBeUndefined();
+    expect(p.msrl_open_flags).toBeUndefined();
     expect(p.source_contact_id).toBeUndefined(); // field removed 2026-07-31
     expect(p.name).toBe('Acme — Initial 2026-07-31');
     expect(p.total_business_stage_advancement).toBeUndefined(); // deferred
   });
 
-  it('writes a Rescore snapshot with churchill + sub-stage + joined rationale on the both path', () => {
+  it('writes a Rescore snapshot with MSRL + dimensions + joined rationale on the both path', () => {
     const p = buildStageProperties({ score: bothRescore, name: 'Widgets', rescoreDate: '2026-07-31' }, cat);
     expect(p.snapshot_kind).toBe('Rescore');
-    expect(p.churchill_score).toBe(3);
-    expect(p.churchill_substage).toBe('III-G');
+    expect(p).toMatchObject({ msrl: 3, msrl_demand: 3, msrl_model: 5, msrl_operations: 4, msrl_path: 'Grow',
+      msrl_lens: 'Projects and trades', msrl_open_flags: 'P3', msrl_label: 'MSRL 3-G (D3 / M5 / O4)' });
     expect(p.stage_rationale).toBe('tech note\n\n---\n\nservice note');
     expect(p.name).toBe('Widgets — Rescore 2026-07-31');
     expect(p.source_contact_id).toBeUndefined();

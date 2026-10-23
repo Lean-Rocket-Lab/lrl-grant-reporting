@@ -7,7 +7,7 @@
 //
 // Routing (Zach, 2026-07-28): the client's `business.business_model` decides which dimensions run —
 //   Product  → tech-path    (TRL, MRL, CRL + tech rationale)
-//   Service  → service-path (Churchill stage + sub-stage + service rationale)
+//   Service  → service-path (MSRL: Demand / Model / Operations + path + service rationale)
 //   Both     → all four + both rationales
 // A blank/unrecognized business_model returns null from routePath — the runner SKIPS that company.
 //
@@ -22,16 +22,29 @@ import {
   type Dimension,
   type ScoringPath,
 } from './companyInputs';
-
-export type ChurchillSubstage = 'III-D' | 'III-G' | 'N/A';
+import {
+  MSRL_SCALE,
+  MSRL_GUIDANCE,
+  MSRL_LENSES,
+  PLACE_FLAG_IDS,
+  computeMsrl,
+  isCommercialSite,
+  normalizePath,
+  type MsrlDimension,
+  type MsrlPath,
+} from './msrl';
 
 /** A prior assessment fed into the re-score variant (from a stage record, or contact *_current fields). */
 export interface PriorAssessment {
   trl: number | null;
   mrl: number | null;
   crl: number | null;
-  churchillStage: number | null;
-  churchillSubstage: string | null;
+  /** MSRL headline + dimensions + path from the prior record (null before the first MSRL score). */
+  msrl: number | null;
+  msrlDemand: number | null;
+  msrlModel: number | null;
+  msrlOperations: number | null;
+  msrlPath: string | null;
   techRationale: string | null;
   serviceRationale: string | null;
   /** Where the prior values came from — for run logging. */
@@ -46,8 +59,24 @@ export interface StageScore {
   trl?: number;
   mrl?: number;
   crl?: number;
-  churchillStage?: number;
-  churchillSubstage?: ChurchillSubstage;
+  /** MSRL headline (lowest of D/M/O after the place-flag cap). Computed in code, never by the model. */
+  msrl?: number;
+  msrlDemand?: number;
+  msrlModel?: number;
+  msrlOperations?: number;
+  msrlPath?: MsrlPath;
+  /** True when the owner left the path blank and the model inferred it. */
+  msrlPathInferred?: boolean;
+  msrlLens?: string;
+  msrlLensInferred?: boolean;
+  /** Place flags judged open (only populated for a commercial site). */
+  msrlOpenFlags?: string[];
+  msrlCappedBy?: string | null;
+  /** "MSRL 4-S (D7 / M4 / O6)" */
+  msrlLabel?: string;
+  msrlBottleneck?: MsrlDimension;
+  /** Unmet criteria of the bottleneck dimension's next rung: the 90-day plan. */
+  msrlNextMilestone?: string;
   techRationale?: string;
   serviceRationale?: string;
   /** True when this run had a prior assessment (re-score variant). */
@@ -111,16 +140,6 @@ const CRL_SCALE = `CRL (Commercial Readiness Level, 1-9):
   8. Established market presence - recognized in the market; sustainable revenue.
   9. Market leadership - mature commercial operation; market leader.`;
 
-const CHURCHILL_SCALE = `Churchill & Lewis stage (1-5). A company's stage is defined by its DEMONSTRATED operating reality — whether a product/service is actually being delivered to paying customers, at what scale, and with how much organization behind it — NOT by self-reported adjectives or future plans.
-  1. Existence - still proving the business works: winning first customers and delivering the product/service. Owner does almost everything; few or no employees; little or no meaningful revenue. Includes anything pre-product or pre-customer ("just an idea", "no product or customers yet").
-  2. Survival - a workable business with enough repeat customers and operations to deliver reliably; the central concern is revenue vs. expenses (break-even to modestly cash-generating). Still small and owner-centric.
-  3. Success - genuinely healthy and profitable at meaningful scale, with enough employees/managers that the owner is no longer doing everything and could step back. The owner faces a real "stay-put vs. grow" choice. A solo operator or owner-does-everything shop is NOT Stage 3 even if it reports being "profitable".
-  4. Take-off - an already-established, revenue-generating Stage-3 business that is NOW growing rapidly (growth already happening, not merely planned), straining delegation and the cash to finance that growth.
-  5. Resource Maturity - large, professionally managed, established systems and substantial resources; rapid growth has been consolidated.
-Sub-stage (ONLY when stage = 3; otherwise N/A):
-  III-D (Disengagement) - owner holding at this size, extracting profits; modest plans. Planned FTE growth <25%; management owner-only or owner + a few supervisors.
-  III-G (Growth) - owner reinvesting and preparing for take-off. Planned FTE growth >25% OR a management team is being established.`;
-
 // Per-dimension "primary signal" guidance — verbatim from the classifier prompts.
 const TRL_GUIDANCE =
   `TRL: Use "Current state of technology / product" as the primary signal — it maps directly to TRL levels 1-8. ` +
@@ -135,28 +154,12 @@ const CRL_GUIDANCE =
   `CRL: "Where they are with selling" is the primary signal — it maps directly to CRL 1-8. Paying customers and revenue corroborate. ` +
   `PMF = Yes pushes toward 5+; Working on it suggests 3-4; No suggests ≤3. If inputs conflict (e.g., "Scaling" but 0 paying ` +
   `customers), trust the more conservative signal.`;
-const CHURCHILL_GUIDANCE =
-  `Churchill: Determine the stage from what the company ACTUALLY has in operation today. Work down this list and STOP at the ` +
-  `first stage that fits:\n` +
-  `  • No product yet, OR no paying customers yet, OR the owner is still proving the business works → Stage 1 — regardless of ` +
-  `headcount plans, management-team claims, or a "profitable" self-report.\n` +
-  `  • A real product/service delivered to repeat paying customers, covering costs but small and owner-dependent → Stage 2.\n` +
-  `  • Consistently profitable AND large/organized enough (real employees or managers; owner not doing everything) that the owner ` +
-  `could disengage → Stage 3.\n` +
-  `  • A Stage-3-caliber business already in rapid, active growth → Stage 4.\n` +
-  `  • Mature, professionally managed, well-resourced → Stage 5.\n` +
-  `Weight the signals that describe the REAL current state most: "Where they are today", the company description, actual revenue, ` +
-  `current FTE, owner involvement, and management layer. Treat "Cash flow today" adjectives (e.g. "profitable") and PLANNED/future ` +
-  `FTE as corroborating only — never let a "profitable" label or an aspirational hiring plan alone push a tiny, owner-run, or ` +
-  `pre-customer business into Stage 3+. When signals conflict, choose the LOWER (more conservative) stage: a business cannot be ` +
-  `past Stage 2 without a real product AND paying customers actually in operation.`;
-
 /** Bounds per numeric dimension (for the schema + clamp). */
 const DIM_RANGE: Record<Exclude<Dimension, never>, { min: number; max: number }> = {
   trl: { min: 1, max: 9 },
   mrl: { min: 1, max: 10 },
   crl: { min: 1, max: 9 },
-  churchill: { min: 1, max: 5 },
+  msrl: { min: 1, max: 9 },
 };
 
 // ── Prompt + schema assembly (pure — unit-tested without an API call) ──────────
@@ -190,22 +193,43 @@ export function buildScoreSchema(dims: Dimension[]): Record<string, unknown> {
     };
     required.push('tech_rationale');
   }
-  if (set.has('churchill')) {
-    properties.churchill_score = intField('churchill', 'Churchill & Lewis stage, integer 1-5.');
-    properties.churchill_substage = {
-      type: 'string',
-      enum: ['III-D', 'III-G', 'N/A'],
-      description: 'Sub-stage — ONLY meaningful when stage = 3 (otherwise "N/A").',
+  if (set.has('msrl')) {
+    const dim = (name: string) => intField('msrl', `MSRL ${name} dimension, integer 1-9: the highest rung fully met with every rung below it met.`);
+    properties.msrl_demand = dim('Demand (D)');
+    properties.msrl_model = dim('Model (M)');
+    properties.msrl_operations = dim('Operations (O)');
+    properties.msrl_path = { type: 'string', enum: ['S', 'G'], description: "Owner's path: the stated one, or inferred when blank (S when unclear)." };
+    properties.msrl_path_inferred = { type: 'boolean', description: 'True when the owner did not state a path.' };
+    properties.msrl_lens = { type: 'string', enum: [...MSRL_LENSES], description: 'Business lens: the stated one, or the main revenue line when blank.' };
+    properties.msrl_lens_inferred = { type: 'boolean', description: 'True when no lens was stated.' };
+    properties.msrl_flags = {
+      type: 'array',
+      description: 'Place-based flag status. Return an EMPTY array when the business is not on, or committing to, a commercial site.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { id: { type: 'string', enum: PLACE_FLAG_IDS }, status: { type: 'string', enum: ['cleared', 'open', 'unknown'] } },
+        required: ['id', 'status'],
+      },
+    };
+    properties.msrl_next_rung = {
+      type: 'object',
+      additionalProperties: false,
+      description: "For each dimension, one short line naming the unmet criteria of its NEXT rung (\"at top\" when 9).",
+      properties: { demand: { type: 'string' }, model: { type: 'string' }, operations: { type: 'string' } },
+      required: ['demand', 'model', 'operations'],
     };
     properties.service_rationale = {
       type: 'string',
       description:
-        'Service-path note. Format exactly:\n"Stage Scoring — Service Path" (add " (Re-Score)" when a previous ' +
-        'assessment is given), then "Churchill Stage = <n>" (re-score: "Churchill Stage: <prev> → <n>") + 2-3 ' +
-        'sentences citing the rubric stage NAME and specific input evidence, then "Sub-Stage = <val>" ' +
-        '(re-score: "Sub-Stage: <prev> → <val>") + 1 sentence (state "not applicable" when N/A).',
+        'Service-path note. Format exactly:\n"Stage Scoring — Service Path (MSRL)" (add " (Re-Score)" when a previous ' +
+        'assessment is given), then one line each "Demand = <n>", "Model = <n>", "Operations = <n>" (re-score: ' +
+        '"Demand: <prev> → <n>") each followed by 1-2 sentences citing the rung met and the specific input evidence, ' +
+        'then "Path = <S|G>" and "Lens = <lens>" (note "inferred" when not stated), then any open or unknown place ' +
+        'flags. Do not state a headline MSRL; it is computed.',
     };
-    required.push('churchill_score', 'churchill_substage', 'service_rationale');
+    required.push('msrl_demand', 'msrl_model', 'msrl_operations', 'msrl_path', 'msrl_path_inferred', 'msrl_lens',
+      'msrl_lens_inferred', 'msrl_flags', 'msrl_next_rung', 'service_rationale');
   }
   return { type: 'object', additionalProperties: false, properties, required };
 }
@@ -221,10 +245,14 @@ function priorBlock(dims: Dimension[], prior: PriorAssessment | null | undefined
   if ((set.has('trl') || set.has('mrl') || set.has('crl')) && prior.techRationale) {
     lines.push('  Previous tech rationale:', prior.techRationale);
   }
-  if (set.has('churchill')) {
-    lines.push(`  Churchill Stage = ${prior.churchillStage ?? 'n/a'}`);
-    lines.push(`  Sub-Stage = ${prior.churchillSubstage ?? 'N/A'}`);
-    if (prior.serviceRationale) lines.push('  Previous service rationale:', prior.serviceRationale);
+  if (set.has('msrl')) {
+    if (prior.msrl != null) {
+      lines.push(`  MSRL = ${prior.msrl}-${prior.msrlPath ?? '?'} (D${prior.msrlDemand ?? '?'} / M${prior.msrlModel ?? '?'} / O${prior.msrlOperations ?? '?'})`);
+      if (prior.serviceRationale) lines.push('  Previous service rationale:', prior.serviceRationale);
+    } else {
+      // A prior Churchill-era record carries no MSRL: this is the first MSRL baseline.
+      lines.push('  MSRL = n/a (first MSRL assessment; ignore any earlier Churchill stage)');
+    }
   }
   // De-anchor: the prior is REFERENCE for the change narrative only, NOT evidence. Re-derive every
   // score from the current inputs + rubric/guidance as if scoring fresh — a previous score (which may
@@ -254,7 +282,7 @@ export function buildScorePrompt(opts: {
     set.has('trl') ? 'TRL' : null,
     set.has('mrl') ? 'MRL' : null,
     set.has('crl') ? 'CRL' : null,
-    set.has('churchill') ? 'Churchill stage (and sub-stage)' : null,
+    set.has('msrl') ? 'MSRL (Demand, Model and Operations dimensions, path, lens, place flags)' : null,
   ].filter(Boolean);
   parts.push(`Score this client on: ${wanted.join(', ')}.`);
 
@@ -262,14 +290,14 @@ export function buildScorePrompt(opts: {
   if (set.has('trl')) scales.push(TRL_SCALE);
   if (set.has('mrl')) scales.push(MRL_SCALE);
   if (set.has('crl')) scales.push(CRL_SCALE);
-  if (set.has('churchill')) scales.push(CHURCHILL_SCALE);
+  if (set.has('msrl')) scales.push(MSRL_SCALE);
   parts.push('Scales:\n' + scales.join('\n\n'));
 
   const guidance: string[] = [];
   if (set.has('trl')) guidance.push(TRL_GUIDANCE);
   if (set.has('mrl')) guidance.push(MRL_GUIDANCE);
   if (set.has('crl')) guidance.push(CRL_GUIDANCE);
-  if (set.has('churchill')) guidance.push(CHURCHILL_GUIDANCE);
+  if (set.has('msrl')) guidance.push(MSRL_GUIDANCE);
   if (guidance.length) parts.push('Primary-signal guidance:\n' + guidance.join('\n'));
 
   parts.push('Client information:\n' + (opts.inputBlob || '(no inputs provided)'));
@@ -288,13 +316,22 @@ const clampInt = (v: unknown, min: number, max: number): number | undefined => {
   return Math.min(max, Math.max(min, n));
 };
 
+/** What the company record says, independent of the model: the owner's stated path and lens and
+ *  whether place flags apply. Stated values always beat the model's inference. */
+export interface MsrlContext {
+  statedPath?: MsrlPath | null;
+  statedLens?: string | null;
+  commercialSite?: boolean;
+}
+
 /** Validate + clamp the raw model output into a StageScore for the given path. Returns null if a
- *  required score is missing/non-numeric. Enforces sub-stage = N/A unless the stage is 3. */
+ *  required score is missing/non-numeric. The MSRL headline is computed here, not taken from the model. */
 export function parseScoreResult(
   raw: Record<string, unknown> | null,
   path: ScoringPath,
   model: string,
   rescore: boolean,
+  msrlCtx: MsrlContext = {},
 ): StageScore | null {
   if (!raw) return null;
   const set = new Set(PATH_DIMENSIONS[path]);
@@ -306,13 +343,39 @@ export function parseScoreResult(
   if (set.has('trl') || set.has('mrl') || set.has('crl')) {
     out.techRationale = valueToText(raw.tech_rationale) || undefined;
   }
-  if (set.has('churchill')) {
-    out.churchillStage = clampInt(raw.churchill_score, DIM_RANGE.churchill.min, DIM_RANGE.churchill.max);
-    if (out.churchillStage == null) return null;
-    const sub = valueToText(raw.churchill_substage);
-    // Sub-stage only applies at stage 3; force N/A otherwise regardless of what the model emitted.
-    out.churchillSubstage = out.churchillStage === 3 && (sub === 'III-D' || sub === 'III-G') ? sub : 'N/A';
-    out.serviceRationale = valueToText(raw.service_rationale) || undefined;
+  if (set.has('msrl')) {
+    const r = DIM_RANGE.msrl;
+    const d = clampInt(raw.msrl_demand, r.min, r.max);
+    const m = clampInt(raw.msrl_model, r.min, r.max);
+    const o = clampInt(raw.msrl_operations, r.min, r.max);
+    if (d == null || m == null || o == null) return null;
+    const modelPath = normalizePath(raw.msrl_path) ?? 'S';
+    const pathVal: MsrlPath = msrlCtx.statedPath ?? modelPath;
+    const modelLens = valueToText(raw.msrl_lens);
+    const lens = msrlCtx.statedLens || modelLens || undefined;
+    const commercial = Boolean(msrlCtx.commercialSite);
+    const flags = Array.isArray(raw.msrl_flags) ? (raw.msrl_flags as Array<Record<string, unknown>>) : [];
+    const openFlags = commercial
+      ? Array.from(new Set(flags.filter((f) => f?.status === 'open' && PLACE_FLAG_IDS.includes(String(f.id))).map((f) => String(f.id))))
+      : [];
+    const head = computeMsrl({ demand: d, model: m, operations: o, path: pathVal, openFlags, commercialSite: commercial });
+    const next = (raw.msrl_next_rung ?? {}) as Record<string, unknown>;
+    Object.assign(out, {
+      msrl: head.level,
+      msrlDemand: d,
+      msrlModel: m,
+      msrlOperations: o,
+      msrlPath: pathVal,
+      msrlPathInferred: !msrlCtx.statedPath,
+      msrlLens: lens,
+      msrlLensInferred: !msrlCtx.statedLens,
+      msrlOpenFlags: openFlags,
+      msrlCappedBy: head.cappedBy,
+      msrlLabel: head.label,
+      msrlBottleneck: head.bottleneck,
+      msrlNextMilestone: valueToText(next[head.bottleneck]) || undefined,
+      serviceRationale: valueToText(raw.service_rationale) || undefined,
+    } satisfies Partial<StageScore>);
   }
   return out;
 }
@@ -353,7 +416,12 @@ export async function scoreCompany(opts: ScoreCompanyOptions): Promise<StageScor
     user,
     schema,
     model,
-    maxTokens: opts.maxTokens ?? 4000,
+    maxTokens: opts.maxTokens ?? 5000,
   });
-  return parseScoreResult(raw, opts.path, model, Boolean(opts.prior));
+  const msrlCtx: MsrlContext = {
+    statedPath: normalizePath(opts.field('business.msrl_owner_path')),
+    statedLens: null, // lens is inferred by the scorer (no intake question, by design)
+    commercialSite: isCommercialSite(opts.field('business.physical_footprint')),
+  };
+  return parseScoreResult(raw, opts.path, model, Boolean(opts.prior), msrlCtx);
 }

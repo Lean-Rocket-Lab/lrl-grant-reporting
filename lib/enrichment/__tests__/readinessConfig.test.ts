@@ -11,8 +11,8 @@ import {
 } from '../data/readiness';
 
 describe('readiness taxonomy', () => {
-  it('has exactly the 29 services', () => {
-    expect(Object.keys(SERVICES)).toHaveLength(29);
+  it('has the 29 providers-db services plus the 6 Main Street additions', () => {
+    expect(Object.keys(SERVICES)).toHaveLength(35);
   });
 
   it('STOP_SERVICES lines have the right lengths and only reference valid tags', () => {
@@ -68,6 +68,11 @@ describe('stopsForLine / deriveStops', () => {
   });
 
   it('empty tags → empty stops on every line', () => {
-    expect(deriveStops([])).toEqual({ MRL: [], TRL: [], CRL: [], IRL: [] });
+    expect(deriveStops([])).toEqual({ MRL: [], TRL: [], CRL: [], IRL: [], MSRL: [] });
+  });
+  it('places Main Street services on the MSRL line (bookkeeping clears 3, 4 and 7)', () => {
+    expect(deriveStops(['bookkeeping']).MSRL).toEqual([3, 4, 7]);
+    expect(deriveStops(['realestate']).MSRL).toEqual([2, 3, 8, 9]);
+    expect(deriveStops(['ip']).MSRL).toEqual([]);
   });
 });

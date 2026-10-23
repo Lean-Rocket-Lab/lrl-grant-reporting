@@ -1,13 +1,19 @@
-// scripts-ts/resources-tag-run.ts — run the resource-tagger over GHL Resources (Phase B/F).
+// scripts-ts/resources-tag-run.ts — run the resource-tagger over RESOURCE PROFILES.
+//
+// 2026-10-23: Resources moved onto custom_objects.profiles (profile_type = resource;
+// docs/sprints/profiles-resources-merge.md). This script now reads and writes Profiles; the gate
+// (resource-tagger::custom_objects.profiles) is what keeps it to resource profiles. The archived
+// custom_objects.resources object is never touched.
 //
 //   npx vite-node scripts-ts/resources-tag-run.ts --all --limit 8      # DRY-RUN a sample (ignore gate)
-//   npx vite-node scripts-ts/resources-tag-run.ts                      # DRY-RUN, gated (resource_status)
+//   npx vite-node scripts-ts/resources-tag-run.ts                      # DRY-RUN, gated (profile_type=resource + status)
 //   npx vite-node scripts-ts/resources-tag-run.ts --apply --yes --all  # APPLY (writes GHL!) — needs --yes
 //
 // Classifies each Resource org into the 29-service taxonomy (Claude) + derives stops, writing the 7
-// readiness fields on the GHL custom_objects.resources record (equality-guarded ⇒ idempotent). Gate =
-// the enricher config (default resource_status ∈ {Approved}); --all ignores it, --status a,b overrides
-// the resource_status filter, --only id,id targets records, --limit N caps. Emits reports/. Reads .env.local.
+// readiness fields on the GHL profile record (equality-guarded ⇒ idempotent). Gate =
+// the enricher config (default profile_type = Resource AND profile_status ∈ {Approved, Published});
+// --all ignores it (and would include PERSON profiles — pair it with --only), --status a,b overrides
+// the profile_status filter, --only id,id targets records, --limit N caps. Emits reports/. Reads .env.local.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,8 +31,8 @@ function arg(name: string): string | undefined { const i = process.argv.indexOf(
 function flag(name: string): boolean { return process.argv.includes(`--${name}`); }
 function csv(v: unknown): string { const s = v == null ? '' : Array.isArray(v) ? v.join('; ') : String(v); return `"${s.replace(/"/g, '""')}"`; }
 
-const RES_OBJ = 'custom_objects.resources';
-const RES_OBJID = '6a590064ad413a5431fc728e';
+const RES_OBJ = 'custom_objects.profiles';
+const RES_OBJID = 'custom_objects.profiles';
 
 async function runPool<T>(items: T[], limit: number, worker: (item: T, i: number) => Promise<void>) {
   let idx = 0;
@@ -58,15 +64,15 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T, i: number
   const only = arg('only')?.split(',').map((s) => s.trim()).filter(Boolean);
   const all = flag('all');
 
-  // Effective gate (mirror the readiness CLI): --all drops the gate; --status overrides resource_status.
+  // Effective gate (mirror the readiness CLI): --all drops the gate; --status overrides profile_status.
   let groups = (config.groups as any[]).map((g) => ({ combine: g.combine, filters: g.filters.map((f: any) => ({ ...f })) }));
   const statusOverride = arg('status');
-  if (statusOverride) { const anyOf = statusOverride.split(',').map((s) => s.trim()).filter(Boolean); groups = groups.map((g) => ({ ...g, filters: g.filters.map((f: any) => f.field === `${RES_OBJ}.resource_status` ? { ...f, anyOf } : f) })); }
+  if (statusOverride) { const anyOf = statusOverride.split(',').map((s) => s.trim()).filter(Boolean); groups = groups.map((g) => ({ ...g, filters: g.filters.map((f: any) => f.field === `${RES_OBJ}.profile_status` ? { ...f, anyOf } : f) })); }
   const gateCfg = { ...config, groups: all ? [] : groups } as typeof config;
 
   // Load all resource records.
   const recs: any[] = [];
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= 20; page++) {
     const d: any = await c.request({ method: 'POST', path: `/objects/${RES_OBJID}/records/search`, autoLocation: false, body: { locationId: LOC, query: '', page, pageLimit: 100, searchAfter: [], sort: [{ field: 'updatedAt', direction: 'desc' }] } });
     const r = d.records ?? d.data ?? []; recs.push(...r); if (r.length < 100) break;
   }
@@ -84,7 +90,7 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T, i: number
   const rows: any[] = []; const stats = { processed: 0, changed: 0, writes: 0, verify: 0, error: 0 }; let last = Date.now();
 
   await runPool(todo, concurrency, async (r) => {
-    const id = r.id ?? r._id; const name = (r.properties ?? {}).resources ?? '';
+    const id = r.id ?? r._id; const name = (r.properties ?? {}).display_name ?? '';
     try {
       const res = await enrichRecord(RES_OBJ, id, [resourceTagger], catalog, { mode: 'overwrite', minConfidence: 0 }, { apply });
       const byKey = new Map(res.proposals.map((p) => [p.fieldKey.replace(`${RES_OBJ}.`, ''), p.value]));
@@ -92,15 +98,15 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T, i: number
       if (verify) stats.verify++;
       if (res.applied.length) { stats.changed++; stats.writes += res.applied.length; }
       rows.push({ id, name, serviceAreas: byKey.get('service_areas') ?? [], confidence: byKey.get('readiness_confidence') ?? '', verify,
-        MRL: byKey.get('mrl_stops') ?? [], TRL: byKey.get('trl_stops') ?? [], CRL: byKey.get('crl_stops') ?? [], IRL: byKey.get('investor_readiness_stops') ?? [], rationale, applied: res.applied.map((a) => a.fieldKey) });
+        MRL: byKey.get('mrl_stops') ?? [], TRL: byKey.get('trl_stops') ?? [], CRL: byKey.get('crl_stops') ?? [], IRL: byKey.get('investor_readiness_stops') ?? [], MSRL: byKey.get('msrl_stops') ?? [], rationale, applied: res.applied.map((a) => a.fieldKey) });
     } catch (e: any) { stats.error++; rows.push({ id, name, error: e?.message ?? String(e) }); }
     finally { stats.processed++; if (Date.now() - last > 2000 || stats.processed === todo.length) { console.log(`  ${stats.processed}/${todo.length} | changed=${stats.changed} verify=${stats.verify} err=${stats.error}`); last = Date.now(); } }
   });
 
   writeFileSync(join(reportsDir, `${tag}.json`), JSON.stringify({ tag, apply, stats, rows }, null, 2));
-  const header = ['id', 'name', 'serviceAreas', 'confidence', 'verify', 'MRL', 'TRL', 'CRL', 'IRL', 'rationale'];
+  const header = ['id', 'name', 'serviceAreas', 'confidence', 'verify', 'MRL', 'TRL', 'CRL', 'IRL', 'MSRL', 'rationale'];
   const lines = [header.join(',')];
-  for (const r of rows.sort((a, b) => String(a.name).localeCompare(String(b.name)))) lines.push([csv(r.id), csv(r.name), csv(r.serviceAreas), csv(r.confidence), csv(r.verify), csv(r.MRL), csv(r.TRL), csv(r.CRL), csv(r.IRL), csv(r.error ? `ERROR: ${r.error}` : r.rationale)].join(','));
+  for (const r of rows.sort((a, b) => String(a.name).localeCompare(String(b.name)))) lines.push([csv(r.id), csv(r.name), csv(r.serviceAreas), csv(r.confidence), csv(r.verify), csv(r.MRL), csv(r.TRL), csv(r.CRL), csv(r.IRL), csv(r.MSRL), csv(r.error ? `ERROR: ${r.error}` : r.rationale)].join(','));
   writeFileSync(join(reportsDir, `${tag}.csv`), lines.join('\n') + '\n');
 
   // Console preview

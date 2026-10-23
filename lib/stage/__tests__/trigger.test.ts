@@ -27,6 +27,6 @@ describe('STAGE_SCORER_META', () => {
     expect(STAGE_SCORER_META.name).toBe('client-stage-scorer');
     expect(STAGE_SCORER_META.target).toBe('company');
     expect(STAGE_SCORER_META.sourceObject).toBe('business');
-    expect(STAGE_SCORER_META.produces).toContain('churchill_substage');
+    expect(STAGE_SCORER_META.produces).toContain('msrl_demand');
   });
 });

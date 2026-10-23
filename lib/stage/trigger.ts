@@ -33,9 +33,9 @@ export const STAGE_SCORER_NAME = 'client-stage-scorer';
 export const STAGE_SCORER_META = {
   name: STAGE_SCORER_NAME,
   description:
-    'Score a company on TRL/MRL/CRL and/or Churchill (routed by business model) with one Claude call, ' +
+    'Score a company on TRL/MRL/CRL and/or MSRL (routed by business model) with one Claude call, ' +
     'appending a Client Stage Tracking record per scoring event. Runs when a scoring input changes.',
-  produces: ['trl', 'mrl', 'crl', 'churchill_score', 'churchill_substage', 'stage_rationale'],
+  produces: ['trl', 'mrl', 'crl', 'msrl', 'msrl_demand', 'msrl_model', 'msrl_operations', 'msrl_path', 'msrl_lens', 'msrl_open_flags', 'msrl_label', 'msrl_next_milestone', 'stage_rationale'],
   target: 'company' as const,
   sourceObject: 'business',
   gateWired: true,
@@ -58,7 +58,7 @@ export interface StageTriggerResult {
   path?: string;
   action?: 'created' | 'updated' | 'would-create' | 'would-update';
   recordId?: string;
-  scores?: { trl?: number; mrl?: number; crl?: number; churchillStage?: number; churchillSubstage?: string };
+  scores?: { trl?: number; mrl?: number; crl?: number; msrl?: number; msrlLabel?: string };
   /** Result of pushing the new scores up to the company's *_current fields (apply path only). */
   propagated?: PropagateResult | { error: string };
 }
@@ -128,7 +128,7 @@ export async function runStageScoreTrigger(companyId: string, opts: StageTrigger
   const score = await scoreCompany({ field, path, prior: ctx.prior });
   if (!score) return { ran: false, reason: 'scorer returned no result' };
 
-  const scores = { trl: score.trl, mrl: score.mrl, crl: score.crl, churchillStage: score.churchillStage, churchillSubstage: score.churchillSubstage };
+  const scores = { trl: score.trl, mrl: score.mrl, crl: score.crl, msrl: score.msrl, msrlLabel: score.msrlLabel };
   const nameRf = rf.get('business.name') ?? rf.get('name');
   const name = (nameRf ? String(nameRf) : '') || companyId;
   const willOverwrite = Boolean(ctx.todayRecordId);
@@ -143,8 +143,14 @@ export async function runStageScoreTrigger(companyId: string, opts: StageTrigger
   if (score.trl != null) logFields.push({ field: 'trl', to: score.trl });
   if (score.mrl != null) logFields.push({ field: 'mrl', to: score.mrl });
   if (score.crl != null) logFields.push({ field: 'crl', to: score.crl });
-  if (score.churchillStage != null) logFields.push({ field: 'churchill_score', to: score.churchillStage });
-  if (score.churchillSubstage) logFields.push({ field: 'churchill_substage', to: score.churchillSubstage });
+  if (score.msrl != null) {
+    logFields.push({ field: 'msrl', to: score.msrl });
+    logFields.push({ field: 'msrl_demand', to: score.msrlDemand });
+    logFields.push({ field: 'msrl_model', to: score.msrlModel });
+    logFields.push({ field: 'msrl_operations', to: score.msrlOperations });
+    logFields.push({ field: 'msrl_path', to: score.msrlPath });
+    if (score.msrlCappedBy) logFields.push({ field: 'msrl_capped_by', to: score.msrlCappedBy });
+  }
   const rationale = [score.techRationale, score.serviceRationale].filter(Boolean).join('\n\n---\n\n');
   const logScore = (recordId: string, action: 'create' | 'update') =>
     logChange({ objectType: STAGE_OBJECT, recordId, recordLabel: name, actorKind: 'scorer', actorName: STAGE_SCORER_NAME, action, changes: logFields, method: 'ai', rationale, applied: true });

@@ -1,5 +1,5 @@
 // lib/enrichment/enrichers/readinessTagger.ts — classify a team member's profile into Brandon's
-// 29-service taxonomy (Claude), then DERIVE their subway-map stops in code.
+// service taxonomy (Claude), then DERIVE their subway-map stops in code.
 //
 // Design (locked with Zach): the LLM assigns EXPERTISE (service tags) only; code derives the
 // stop numbers from those tags via STOP_SERVICES. Benefits: a stop-definition change re-derives
@@ -12,7 +12,7 @@
 // website_team_tags ∈ {Team,EIR} — so cutover changed nothing. This enricher is now a pure transform;
 // it does NOT re-check membership. `passesMembershipGate` stays exported as a helper for the CLI/tests.
 //
-// Writes 7 GHL contact fields: service_areas (labels), mrl/trl/crl/investor_readiness_stops
+// Writes 8 GHL contact fields: service_areas (labels), mrl/trl/crl/investor_readiness/msrl_stops
 // (number strings), readiness_confidence (High/Medium/Low), readiness_rationale (one line).
 
 import type {
@@ -23,6 +23,7 @@ import type {
 } from '../types';
 import { hasAnthropic, classifyJson, CLASSIFIER_MODEL } from '../../ai/anthropic';
 import {
+  LINE_STOP_BARE,
   SERVICES,
   SERVICE_KEYS,
   LINE_KEYS,
@@ -81,7 +82,7 @@ function taxonomyMenu(): string {
 
 export const READINESS_SYSTEM_PROMPT =
   `You classify a Lean Rocket Lab team member (a coach / entrepreneur-in-residence) into a fixed ` +
-  `29-service expertise taxonomy. You assign ONLY expertise tags — you do NOT assign readiness ` +
+  `service expertise taxonomy. You assign ONLY expertise tags — you do NOT assign readiness ` +
   `stages or stop numbers (code derives those from your tags).\n\n` +
   `TAXONOMY (id = label). Choose tag IDS only from this list:\n${taxonomyMenu()}\n\n` +
   `CROSSWALK — map described specialties to tags consistently (same phrase → same tag):\n` +
@@ -97,7 +98,11 @@ export const READINESS_SYSTEM_PROMPT =
   `  "workforce training" → workforce; "factory layout / industrial engineering" → facility.\n` +
   `  Domain crosswalks: "economic development" / "EDP director" → bizmodel + grants; "SBDC advisor/consultant"\n` +
   `  → bizmodel + finmodel + market; "leadership / management / executive coaching" → workforce; "CPA / accountant"\n` +
-  `  → finmodel; "brand / creative / video / photography / storytelling" → marketing.\n\n` +
+  `  → finmodel (+ bookkeeping if they keep books); "brand / creative / video / photography / storytelling" → marketing.\n` +
+  `  Main Street crosswalks: "bookkeeper" / "QuickBooks" / "tax prep" → bookkeeping (a CPA who also models → +finmodel);\n` +
+  `  "licensing / permits / insurance agent" → licensing; "commercial real estate / site selection / broker" → realestate;\n` +
+  `  "lender / loan officer / CDFI / SBA loans" → lending (equity/investors stay fundraise); "HR / recruiting / hiring" → hr;\n` +
+  `  "operations / SOPs / systems / process documentation" → ops.\n\n` +
   `RULES:\n` +
   `  1. Explicit beats inferred — a stated specialty maps directly to its tag.\n` +
   `  2. Fewer, truer tags win. Return AT MOST 3 tags, and usually 1–2. A coach is later placed at every\n` +
@@ -146,6 +151,7 @@ const RATIONALE_DRIVERS = [
   'contact.trl_stops',
   'contact.crl_stops',
   'contact.investor_readiness_stops',
+  'contact.msrl_stops',
   'contact.readiness_confidence',
 ];
 
@@ -193,8 +199,8 @@ export function buildProposals(
 
 /**
  * Re-derive stops from the contact's EXISTING service_areas, with no LLM call. Used when
- * STOP_SERVICES changes: reads the already-classified tags off the contact and rewrites the 4
- * stop fields. Returns [] when no service_areas are set. Gating is the caller's job (config).
+ * STOP_SERVICES changes: reads the already-classified tags off the contact and rewrites every
+ * stop field. Returns [] when no service_areas are set. Gating is the caller's job (config).
  */
 export function rederiveProposals(input: ContactEnricherInput): ContactEnrichmentProposal[] {
   const labels = input.field('contact.service_areas');
@@ -218,7 +224,7 @@ export function rederiveProposals(input: ContactEnricherInput): ContactEnrichmen
 export const readinessTagger: ContactEnricher = {
   name: 'readiness-tagger',
   description:
-    'Classify a team member’s profile into the 29-service taxonomy (Claude) and derive subway-map ' +
+    'Classify a team member’s profile into the service taxonomy (Claude) and derive subway-map ' +
     'stops. Status + membership gates are configurable (default: status=Approved, Team/EIR only).',
   produces: [
     'contact.service_areas',
@@ -226,6 +232,7 @@ export const readinessTagger: ContactEnricher = {
     'contact.trl_stops',
     'contact.crl_stops',
     'contact.investor_readiness_stops',
+    'contact.msrl_stops',
     'contact.readiness_confidence',
     'contact.readiness_rationale',
   ],

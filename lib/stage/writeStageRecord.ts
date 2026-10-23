@@ -33,7 +33,8 @@ export function buildStageProperties(input: BuildStagePropsInput, catalog: Custo
   const { score } = input;
   const methodOpts = catalog.byKey[`${STAGE_OBJECT}.rescore_method`]?.options;
   const kindOpts = catalog.byKey[`${STAGE_OBJECT}.snapshot_kind`]?.options;
-  const substageOpts = catalog.byKey[`${STAGE_OBJECT}.churchill_substage`]?.options;
+  const pathOpts = catalog.byKey[`${STAGE_OBJECT}.msrl_path`]?.options;
+  const lensOpts = catalog.byKey[`${STAGE_OBJECT}.msrl_lens`]?.options;
   const date = input.rescoreDate ?? new Date().toISOString();
   const dateStr = (date instanceof Date ? date.toISOString() : String(date)).slice(0, 10);
   const kind = score.rescore ? 'Rescore' : 'Initial';
@@ -47,9 +48,22 @@ export function buildStageProperties(input: BuildStagePropsInput, catalog: Custo
   if (score.trl != null) props.trl = score.trl;
   if (score.mrl != null) props.mrl = score.mrl;
   if (score.crl != null) props.crl = score.crl;
-  if (score.churchillStage != null) props.churchill_score = score.churchillStage;
-  // churchill_substage is now SINGLE_OPTIONS [III-D, III-G, N/A] — resolve to the exact option label.
-  if (score.churchillSubstage) props.churchill_substage = resolveOptionLabel(score.churchillSubstage, substageOpts) ?? score.churchillSubstage;
+  // MSRL (replaced Churchill 2026-10-21). Headline is code-computed; see lib/stage/msrl.ts.
+  if (score.msrl != null) {
+    props.msrl = score.msrl;
+    props.msrl_demand = score.msrlDemand;
+    props.msrl_model = score.msrlModel;
+    props.msrl_operations = score.msrlOperations;
+    if (score.msrlPath) {
+      const label = score.msrlPath === 'G' ? 'Grow' : 'Sustain';
+      props.msrl_path = resolveOptionLabel(label, pathOpts) ?? label;
+    }
+    if (score.msrlLens) props.msrl_lens = resolveOptionLabel(score.msrlLens, lensOpts) ?? score.msrlLens;
+    // TEXT, not MULTIPLE_OPTIONS: a create POST can't take the modifier shape, and this is a log value.
+    props.msrl_open_flags = (score.msrlOpenFlags ?? []).join(', ');
+    if (score.msrlLabel) props.msrl_label = score.msrlLabel;
+    if (score.msrlNextMilestone) props.msrl_next_milestone = score.msrlNextMilestone;
+  }
   const rationale = joinRationale(score);
   if (rationale) props.stage_rationale = rationale;
   // source_contact_id field was removed (Zach, 2026-07-31); total_business_stage_advancement is DEFERRED.

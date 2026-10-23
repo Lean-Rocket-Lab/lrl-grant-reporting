@@ -37,7 +37,7 @@ function splitRationale(combined: string | null): { tech: string | null; service
   let tech: string | null = null;
   let service: string | null = null;
   for (const seg of segments) {
-    if (/service path|churchill/i.test(seg)) service = service ? `${service}\n\n${seg}` : seg;
+    if (/service path|churchill|msrl/i.test(seg)) service = service ? `${service}\n\n${seg}` : seg;
     else tech = tech ? `${tech}\n\n${seg}` : seg;
   }
   // Single unlabeled block: keep it as tech context (harmless — it's only narrative for the re-score).
@@ -52,8 +52,11 @@ function fromStageRecord(get: (k: string) => unknown): PriorAssessment {
     trl: num(get('trl')),
     mrl: num(get('mrl')),
     crl: num(get('crl')),
-    churchillStage: num(get('churchill_score')),
-    churchillSubstage: str(get('churchill_substage')),
+    msrl: num(get('msrl')),
+    msrlDemand: num(get('msrl_demand')),
+    msrlModel: num(get('msrl_model')),
+    msrlOperations: num(get('msrl_operations')),
+    msrlPath: str(get('msrl_path')),
     techRationale: tech,
     serviceRationale: service,
     source: 'record',
@@ -66,12 +69,12 @@ function fromContactFields(get: (k: string) => unknown): PriorAssessment | null 
   const trl = num(get('contact.trl_current'));
   const mrl = num(get('contact.mrl_current'));
   const crl = num(get('contact.crl_current'));
-  const churchill = num(get('contact.churchill_current'));
-  if (trl == null && mrl == null && crl == null && churchill == null) return null;
+  // Contact Churchill fields are being deleted (MSRL migration); contacts carry no MSRL, so the
+  // fallback only ever supplies tech-path priors.
+  if (trl == null && mrl == null && crl == null) return null;
   return {
     trl, mrl, crl,
-    churchillStage: churchill,
-    churchillSubstage: str(get('contact.churchill_substage_current')),
+    msrl: null, msrlDemand: null, msrlModel: null, msrlOperations: null, msrlPath: null,
     // contact.latest_tech_stage_rationale (now displayed "Stage Rationale") holds the combined
     // tech+service rationale. The separate churchill rationale + rescored-date legacy contact fields
     // were deleted (2026-08-04), so serviceRationale/rescoreDate have no source on this fallback path.

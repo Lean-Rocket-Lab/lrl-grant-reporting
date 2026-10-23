@@ -26,7 +26,7 @@
   :root{
     --yellow-500:#f8b932; --yellow-600:#e0a41e;
     --teal-500:#05998c; --teal-600:#047c72;
-    --green-500:#3fae6b; --violet-500:#7c6cf0;
+    --green-500:#3fae6b; --violet-500:#7c6cf0; --rust-500:#c8553d;
     --ink-900:#171717; --brand:#f8b932;
     --surface:#ffffff; --surface-sunken:#efeff2;
     --text:#171717; --text-secondary:#6b6b73; --text-muted:#7c7c84;
@@ -214,10 +214,23 @@
         ['Cost side validated','You know what it truly costs to deliver.','Assemble the metrics investors will diligence.'],
         ['Metrics that matter','A validated, fundable machine.','Terminus — raise scaling capital on your terms.'],
       ] },
+    MSRL: { name:'Main Street Line',
+      sub:'Does your local business work for you, season after season? Lean Rocket Lab Main Street Readiness Levels (1-9): Demand, Model and Operations, scored by the lowest.',
+      stops:[
+        ['Concept','The idea, your goals and your capacity are written down. Nothing validated yet.','Talk to 15+ real prospects, state an offer and a price, scan the trade area.'],
+        ['Validated interest','People outside your circle respond to a stated offer at a stated price.','Win 10 paid customers outside friends and family, and get legal: entity, license, insurance.'],
+        ['First paying customers','Strangers have paid real money, and the business is legal.','Reach 90 in-season days of revenue from one channel, with monthly P&Ls.'],
+        ['Repeatable','Revenue arrives without heroics, from a channel you can name.','Reconcile cost per sale to the books so every core offer makes money.'],
+        ['Profitable per sale','Every job, ticket or product makes money after its direct costs.','Cover every cost, including a market-rate wage for you, across a full year.'],
+        ['Pays the owner','The business pays you a real wage across a full year. The hardest gate.','Document the systems and pass a two-week owner absence test.'],
+        ['Durable','The business survives you stepping away.','Build 12 months of clean financials and a reserve for the slowest season.'],
+        ['Bankable','Your numbers would survive a lender, a landlord or a buyer.','Build a succession file, or prove a second unit or channel.'],
+        ['Transferable or expandable','The business could change hands, or add units without breaking.','Terminus: keep it, sell it, or grow it on your terms.'],
+      ] },
   };
-  var LINE_ORDER = ['MRL','TRL','CRL','IRL'];
-  var COLORS = { MRL:'var(--yellow-500)', TRL:'var(--teal-500)', CRL:'var(--green-500)', IRL:'var(--violet-500)' };
-  var LCT    = { MRL:'var(--ink-900)', TRL:'#fff', CRL:'#fff', IRL:'#fff' };
+  var LINE_ORDER = ['MRL','TRL','CRL','IRL','MSRL'];
+  var COLORS = { MRL:'var(--yellow-500)', TRL:'var(--teal-500)', CRL:'var(--green-500)', IRL:'var(--violet-500)', MSRL:'var(--rust-500)' };
+  var LCT    = { MRL:'var(--ink-900)', TRL:'#fff', CRL:'#fff', IRL:'#fff', MSRL:'#fff' };
 
   /* ===== state ===== */
   var state = { line:'MRL', stop:1, providers:[], coachPage:0, resPage:0, activeTag:null };

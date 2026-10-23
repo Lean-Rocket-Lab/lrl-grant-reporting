@@ -1,4 +1,4 @@
-// lib/stage/companyInputs.ts — the 18 COMPANY-side scoring inputs for the Client Stage scorer.
+// lib/stage/companyInputs.ts — the COMPANY-side scoring inputs for the Client Stage scorer.
 //
 // The legacy GHL workflow read {{contact.*}} intake answers; the new enricher is company-scoped
 // (see docs/sprints/scoring-enricher-kickoff.md): contacts fill forms → the up-sync carries the
@@ -11,16 +11,17 @@ import { optionKeyToLabel } from '../ghl/coerce';
 import type { CustomFieldCatalog } from '../ghl/types';
 
 /** Which readiness dimension a scoring input informs. */
-export type Dimension = 'trl' | 'mrl' | 'crl' | 'churchill';
+/** `msrl` = Main Street Readiness Level (D/M/O, headline = lowest). Replaced Churchill 2026-10-21. */
+export type Dimension = 'trl' | 'mrl' | 'crl' | 'msrl';
 
 /** Scoring path, routed from `business.business_model` (see scoreCompany.routePath). */
 export type ScoringPath = 'tech' | 'service' | 'both';
 
-/** The dimensions each path produces. tech = TRL/MRL/CRL; service = Churchill; both = all four. */
+/** The dimensions each path produces. tech = TRL/MRL/CRL; service = MSRL; both = all four. */
 export const PATH_DIMENSIONS: Record<ScoringPath, Dimension[]> = {
   tech: ['trl', 'mrl', 'crl'],
-  service: ['churchill'],
-  both: ['trl', 'mrl', 'crl', 'churchill'],
+  service: ['msrl'],
+  both: ['trl', 'mrl', 'crl', 'msrl'],
 };
 
 export interface ScoringInput {
@@ -35,14 +36,15 @@ export interface ScoringInput {
 }
 
 /**
- * The 19 scoring inputs. `businessKey` values were derived from config/field-mappings.json (the
+ * The scoring inputs. ⚠️ `business.msrl_owner_path` / `msrl_owner_goals` are created by
+ * scripts-ts/msrl-fields-setup.ts; until they exist they read blank and drop out of the blob. `businessKey` values were derived from config/field-mappings.json (the
  * live contact→company pairs) and confirmed against the live `business` object catalog. Labels and
  * dimension assignments mirror the per-dimension prompts in the kickoff doc.
  */
 export const SCORING_INPUTS: ScoringInput[] = [
   // Context — feeds every dimension.
-  { businessKey: 'business.description', label: 'Company description', dims: ['trl', 'mrl', 'crl', 'churchill'] },
-  { businessKey: 'business.where_are_you_today', label: 'Where they are today', dims: ['trl', 'mrl', 'crl', 'churchill'] },
+  { businessKey: 'business.description', label: 'Company description', dims: ['trl', 'mrl', 'crl', 'msrl'] },
+  { businessKey: 'business.where_are_you_today', label: 'Where they are today', dims: ['trl', 'mrl', 'crl', 'msrl'] },
   // TRL signals.
   { businessKey: 'business.tech_product_state', label: 'Current state of technology / product', dims: ['trl'] },
   { businessKey: 'business.patents', label: 'Patents', dims: ['trl'] },
@@ -51,21 +53,29 @@ export const SCORING_INPUTS: ScoringInput[] = [
   { businessKey: 'business.mfg_method', label: 'How is your product manufactured today', dims: ['mrl'] },
   { businessKey: 'business.mfg_partner_status', label: 'Manufacturing partner status', dims: ['mrl'] },
   // CRL signals.
-  { businessKey: 'business.paying_customers', label: 'Number of paying customers today', dims: ['crl'] },
   { businessKey: 'business.selling_stage', label: 'Where they are with selling', dims: ['crl'] },
   { businessKey: 'business.product_market_fit', label: 'Self-reported product-market fit', dims: ['crl'] },
-  // Shared revenue signal (CRL + Churchill). `annual_revenue` is the sole revenue input — the legacy
+  // Shared revenue signal (CRL + MSRL). `annual_revenue` is the sole revenue input — the legacy
   // `revenue_stage` was a redundant restatement of the same thing and isn't collected on the intake
   // form, so it was dropped (Zach, 2026-07-31).
-  { businessKey: 'business.annual_revenue', label: 'Annual revenue (last 12 months)', dims: ['crl', 'churchill'], money: true },
-  // Churchill signals.
-  { businessKey: 'business.date_of_incorporation', label: 'Date business founded', dims: ['churchill'] },
-  { businessKey: 'business.fte_current', label: 'Current FTE', dims: ['churchill'] },
-  { businessKey: 'business.fte_hiring_next_12mo', label: 'Planned FTE next 12 months', dims: ['churchill'] },
-  { businessKey: 'business.owner_involvement', label: 'Owner involvement', dims: ['churchill'] },
-  { businessKey: 'business.cash_flow_today', label: 'Cash flow today', dims: ['churchill'] },
-  { businessKey: 'business.locations_sites', label: 'Locations / sites', dims: ['churchill'] },
-  { businessKey: 'business.management_team', label: 'Management layer', dims: ['churchill'] },
+  { businessKey: 'business.annual_revenue', label: 'Annual revenue (last 12 months)', dims: ['crl', 'msrl'], money: true },
+  { businessKey: 'business.paying_customers', label: 'Number of paying customers today', dims: ['crl', 'msrl'] },
+  // MSRL — the ONLY two new intake questions (Zach 2026-10-21: no 15-field form). The owner's answer
+  // picks the path, it is NOT scored. Everything else MSRL needs is read from answers the intake
+  // already collects; lens and site flags are inferred by the scorer and stored on the stage record.
+  { businessKey: 'business.msrl_owner_path', label: "Owner's path (Sustain = stay the main provider, Grow = team/units that run without the owner)", dims: ['msrl'] },
+  { businessKey: 'business.msrl_owner_goals', label: 'Owner goals (income wanted, hours and seasons to work)', dims: ['msrl'] },
+  // MSRL — existing intake answers, read as evidence.
+  { businessKey: 'business.naics_code', label: 'NAICS code', dims: ['msrl'] },
+  { businessKey: 'business.date_of_incorporation', label: 'Date business founded', dims: ['msrl'] },
+  { businessKey: 'business.financial_statements_access', label: 'Financial statements available', dims: ['msrl'] },
+  { businessKey: 'business.cash_flow_today', label: 'Cash flow today', dims: ['msrl'] },
+  { businessKey: 'business.fte_current', label: 'Current FTE', dims: ['msrl'] },
+  { businessKey: 'business.fte_hiring_next_12mo', label: 'Planned FTE next 12 months', dims: ['msrl'] },
+  { businessKey: 'business.owner_involvement', label: 'Owner involvement', dims: ['msrl'] },
+  { businessKey: 'business.management_team', label: 'Management layer', dims: ['msrl'] },
+  { businessKey: 'business.physical_footprint', label: 'Physical footprint', dims: ['msrl'] },
+  { businessKey: 'business.locations_sites', label: 'Locations / sites', dims: ['msrl'] },
 ];
 
 /** Every business key a scoring input reads (for coverage checks in the runner). */

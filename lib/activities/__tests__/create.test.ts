@@ -40,7 +40,7 @@ const ASSOC_DEFS = [
   { id: 'assoc-contact', key: ACTIVITY_CONTACT_KEY, firstObjectKey: 'contact', secondObjectKey: ACTIVITIES_OBJECT },
   { id: 'assoc-referred', key: REFERRED_TO_KEY, firstObjectKey: 'contact', secondObjectKey: ACTIVITIES_OBJECT },
   { id: 'assoc-referred-co', key: 'referral_referred_to_company', firstObjectKey: 'business', secondObjectKey: ACTIVITIES_OBJECT },
-  { id: 'assoc-referred-res', key: 'referral_referred_to_resource', firstObjectKey: 'custom_objects.resources', secondObjectKey: ACTIVITIES_OBJECT },
+  { id: 'assoc-referred-res', key: 'referral_referred_to_profile', firstObjectKey: 'custom_objects.profiles', secondObjectKey: ACTIVITIES_OBJECT },
 ];
 
 interface FakeOpts {
@@ -254,7 +254,7 @@ describe('createActivity', () => {
     expect(res.links.map((l) => [l.key, l.recordId, l.status])).toEqual([
       [COMPANY_ACTIVITY_KEY, 'biz1', 'linked'],
       [ACTIVITY_CONTACT_KEY, 'c1', 'linked'],
-      ['referral_referred_to_resource', 'res9', 'linked'],
+      ['referral_referred_to_profile', 'res9', 'linked'],
       ['referral_referred_to_company', 'biz-provider', 'linked'],
     ]);
   });

@@ -2,8 +2,9 @@
 //
 // Zach, 2026-08-19: referrals are logged in THIS app rather than a GHL form precisely because it is
 // internal and can look the counterparty up dynamically. A referral counterparty is rarely someone
-// at the client's own company — it is a mentor, a capital provider, or one of the 91 records in the
-// Resources directory, which is literally the list of orgs LRL refers clients to.
+// at the client's own company — it is a mentor, a capital provider, or one of the resource profiles
+// (profile_type = resource on custom_objects.profiles since 2026-10-23), the list of orgs LRL refers
+// clients to.
 //
 // So one search spans:
 //   • Resources — the TAP/resource directory (published only)
@@ -37,9 +38,13 @@ async function loadCached() {
   const [resData, businesses] = await Promise.all([
     client.request<any>({
       method: 'POST',
-      path: '/objects/custom_objects.resources/records/search',
+      // Resources live on Profiles since 2026-10-23 (profile_type = resource). Filter by option KEY.
+      path: '/objects/custom_objects.profiles/records/search',
       autoLocation: false,
-      body: { locationId: client.locationId, query: '', page: 1, pageLimit: 100, searchAfter: [] },
+      body: {
+        locationId: client.locationId, query: '', page: 1, pageLimit: 500,
+        filters: [{ field: 'properties.profile_type', operator: 'eq', value: 'resource' }],
+      },
     }).catch(() => ({ records: [] })),
     listAllBusinesses(client).catch(() => []),
   ]);
@@ -50,7 +55,7 @@ async function loadCached() {
       return {
         kind: 'Resource' as const,
         id: r.id,
-        name: String(p.resources ?? p.name ?? '').trim(),
+        name: String(p.display_name ?? '').trim(),
         subtitle: [p.category, p.sub_category].filter(Boolean).join(' · ') || undefined,
       };
     })

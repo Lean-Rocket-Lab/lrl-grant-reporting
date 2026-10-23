@@ -11,7 +11,7 @@
 // embed's inline copy in wix-embed/readiness-subway-map.html. (The GHL `service_areas` option
 // labels must equal the SERVICES *values*; the stop fields accept the number strings.)
 
-/** The 29-service master taxonomy: tag id → display label. */
+/** The master service taxonomy (29 from providers-db.js + 6 Main Street additions): tag id → display label. */
 export const SERVICES = {
   ip: 'IP & Patents',
   legal: 'Legal & Contracts',
@@ -42,14 +42,31 @@ export const SERVICES = {
   product: 'Product Management',
   capital: 'Capital Equipment & Financing',
   exit: 'M&A / Exit Planning',
+  // Main Street additions (2026-10-21, MSRL). The 29 above are Brandon's providers-db.js set and
+  // are manufacturing/tech-weighted; MSRL rungs need services a local business actually buys.
+  bookkeeping: 'Bookkeeping & Accounting',
+  licensing: 'Licensing, Permits & Insurance',
+  realestate: 'Site Selection & Commercial Real Estate',
+  lending: 'Small Business Lending',
+  hr: 'Hiring & HR',
+  ops: 'Operations & Procedures',
 } as const;
 
 /** A valid service-tag id. */
 export type ServiceTag = keyof typeof SERVICES;
 
-/** The four readiness lines. */
-export type LineKey = 'MRL' | 'TRL' | 'CRL' | 'IRL';
-export const LINE_KEYS: LineKey[] = ['MRL', 'TRL', 'CRL', 'IRL'];
+/** The five readiness lines. MSRL = Main Street Readiness Level (replaced Churchill 2026-10-21). */
+export type LineKey = 'MRL' | 'TRL' | 'CRL' | 'IRL' | 'MSRL';
+export const LINE_KEYS: LineKey[] = ['MRL', 'TRL', 'CRL', 'IRL', 'MSRL'];
+
+/** Bare stop-field name per line — identical on contact, profiles and resources. */
+export const LINE_STOP_BARE: Record<LineKey, string> = {
+  MRL: 'mrl_stops',
+  TRL: 'trl_stops',
+  CRL: 'crl_stops',
+  IRL: 'investor_readiness_stops',
+  MSRL: 'msrl_stops',
+};
 
 /** Set of valid tag ids (for validating LLM output). */
 export const SERVICE_KEYS: ReadonlySet<string> = new Set(Object.keys(SERVICES));
@@ -60,12 +77,13 @@ export const LINE_STOP_FIELD: Record<LineKey, string> = {
   TRL: 'contact.trl_stops',
   CRL: 'contact.crl_stops',
   IRL: 'contact.investor_readiness_stops',
+  MSRL: 'contact.msrl_stops',
 };
 
 /**
  * STOP_SERVICES — the services typically needed to *exit* each stop on each line.
  * line code → stop number → array of service ids. A contact is placed at a stop when their
- * service tags intersect that stop's needs. (MRL 1–10, TRL/CRL/IRL 1–9.)
+ * service tags intersect that stop's needs. (MRL 1–10, TRL/CRL/IRL/MSRL 1–9.)
  */
 export const STOP_SERVICES: Record<LineKey, Record<number, ServiceTag[]>> = {
   MRL: {
@@ -112,6 +130,19 @@ export const STOP_SERVICES: Record<LineKey, Record<number, ServiceTag[]>> = {
     7: ['product', 'finmodel', 'fundraise'],
     8: ['supply', 'finmodel', 'legal'],
     9: ['fundraise', 'exit', 'finmodel'],
+  },
+  // MSRL 1-9 (MSRL-Framework-v2): the services needed to clear each level's gate on the way to the
+  // next. Site flags P1-P6 gate levels 2-3, hence realestate there.
+  MSRL: {
+    1: ['discovery', 'market', 'bizmodel'],
+    2: ['pricing', 'licensing', 'legal', 'realestate'],
+    3: ['sales', 'marketing', 'bookkeeping', 'realestate'],
+    4: ['bookkeeping', 'pricing', 'finmodel'],
+    5: ['finmodel', 'lending', 'ops'],
+    6: ['ops', 'hr', 'workforce'],
+    7: ['bookkeeping', 'finmodel', 'lending'],
+    8: ['exit', 'lending', 'realestate', 'legal'],
+    9: ['exit', 'finmodel', 'realestate'],
   },
 };
 
@@ -167,6 +198,7 @@ export interface DerivedStops {
   TRL: number[];
   CRL: number[];
   IRL: number[];
+  MSRL: number[];
 }
 
 /**
@@ -181,5 +213,6 @@ export function deriveStops(tags: readonly string[]): DerivedStops {
     TRL: stopsForLine('TRL', clean),
     CRL: stopsForLine('CRL', clean),
     IRL: stopsForLine('IRL', clean),
+    MSRL: stopsForLine('MSRL', clean),
   };
 }

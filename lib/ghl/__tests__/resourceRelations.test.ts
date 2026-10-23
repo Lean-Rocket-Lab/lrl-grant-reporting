@@ -34,7 +34,8 @@ function fakeClient(o: {
       }
       if (path.startsWith('/associations/relations/')) return { relations: o.relations ?? [] };
       if (path.startsWith('/contacts/')) return { contact: o.contact ?? null };
-      if (path.includes('/objects/custom_objects.resources/records/')) {
+      // resources live on Profiles since 2026-10-23
+      if (path.includes('/objects/custom_objects.profiles/records/')) {
         return { record: { properties: { website: o.resourceWebsite } } };
       }
       if (path.includes('/objects/business/records/')) {

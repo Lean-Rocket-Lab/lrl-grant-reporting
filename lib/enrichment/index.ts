@@ -14,6 +14,7 @@ export { laraIdEnricher } from './enrichers/laraId';
 export { naicsEnricher, deriveNaicsText } from './enrichers/naics';
 export { readinessTagger, rederiveProposals, deriveProfileText, passesMembershipGate } from './enrichers/readinessTagger';
 export { resourceTagger, deriveResourceText, buildResourceProposals } from './enrichers/resourceTagger';
+export { profileTagger, deriveProfileRecordText, buildProfileProposals } from './enrichers/profileTagger';
 export { grantReasonEnricher, readLineItems, GRANT_REASON_FIELD, GRANT_REASON_SYSTEM_PROMPT } from './enrichers/grantReason';
 
 import { countyEnricher } from './enrichers/county';
@@ -22,6 +23,7 @@ import { laraIdEnricher } from './enrichers/laraId';
 import { naicsEnricher } from './enrichers/naics';
 import { readinessTagger } from './enrichers/readinessTagger';
 import { resourceTagger } from './enrichers/resourceTagger';
+import { profileTagger } from './enrichers/profileTagger';
 import { grantReasonEnricher } from './enrichers/grantReason';
 import { Enricher, ContactEnricher, RecordEnricher } from './types';
 
@@ -33,6 +35,7 @@ export const defaultContactEnrichers: ContactEnricher[] = [readinessTagger];
 
 /** Default RECORD (custom-object) enricher registry + the object each targets. */
 export const defaultRecordEnrichers: Array<{ enricher: RecordEnricher; sourceObject: string }> = [
-  { enricher: resourceTagger, sourceObject: 'custom_objects.resources' },
+  { enricher: resourceTagger, sourceObject: 'custom_objects.profiles' }, // resource profiles (2026-10-23)
+  { enricher: profileTagger, sourceObject: 'custom_objects.profiles' },
   { enricher: grantReasonEnricher, sourceObject: 'custom_objects.activities' },
 ];

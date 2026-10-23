@@ -9,6 +9,7 @@
 //   npx vite-node scripts-ts/stage-score-run.ts --apply --yes --gated --resume   # nightly sweep (see nightly-score.yml)
 //
 // Flags: --apply (default dry-run) --yes (confirm writes) --limit N (cap companies EXAMINED)
+//        --paths service,both (route filter; the MSRL baseline)
 //        --only id,id  --concurrency N (default 2)  --resume (checkpoint)  --initial-only  --model <id>
 //        --gated (only (re)score companies whose inputs changed since last score — the nightly cost guard)
 //        --no-propagate (skip pushing scores up to company *_current after each write; propagation is on
@@ -88,6 +89,8 @@ function agree(prior: number | null | undefined, next: number | null | undefined
   const concurrency = Number(arg('concurrency') ?? 2);
   const limit = arg('limit') ? Number(arg('limit')) : undefined;
   const only = arg('only')?.split(',').map((s) => s.trim()).filter(Boolean);
+  // --paths service,both : the MSRL baseline (2026-10-21) only touches companies on an MSRL route.
+  const paths = arg('paths')?.split(',').map((s) => s.trim()).filter(Boolean);
   const initialOnly = flag('initial-only');
   const model = arg('model') ?? SCORING_MODEL;
   // After each write, push the new scores up to the company's *_current fields (business_stage →
@@ -146,6 +149,10 @@ function agree(prior: number | null | undefined, next: number | null | undefined
       if (!path) {
         stats.skippedNoRoute++;
         rows.push({ companyId: co.id, name, action: 'skip(no-route)', businessModel: rf.get('business.business_model') ?? '' });
+        return;
+      }
+      if (paths && !paths.includes(path)) {
+        rows.push({ companyId: co.id, name, action: `skip(path ${path})` });
         return;
       }
       stats.inScope++;
@@ -224,8 +231,14 @@ function agree(prior: number | null | undefined, next: number | null | undefined
           if (score.trl != null) logFields.push({ field: 'trl', to: score.trl });
           if (score.mrl != null) logFields.push({ field: 'mrl', to: score.mrl });
           if (score.crl != null) logFields.push({ field: 'crl', to: score.crl });
-          if (score.churchillStage != null) logFields.push({ field: 'churchill_score', to: score.churchillStage });
-          if (score.churchillSubstage) logFields.push({ field: 'churchill_substage', to: score.churchillSubstage });
+          if (score.msrl != null) {
+            logFields.push({ field: 'msrl', to: score.msrl });
+            logFields.push({ field: 'msrl_demand', to: score.msrlDemand });
+            logFields.push({ field: 'msrl_model', to: score.msrlModel });
+            logFields.push({ field: 'msrl_operations', to: score.msrlOperations });
+            logFields.push({ field: 'msrl_path', to: score.msrlPath });
+            if (score.msrlCappedBy) logFields.push({ field: 'msrl_capped_by', to: score.msrlCappedBy });
+          }
           await logChange({
             objectType: STAGE_OBJECT, recordId, recordLabel: name, actorKind: 'scorer', actorName: STAGE_SCORER_NAME,
             action, changes: logFields, method: 'ai',
@@ -250,8 +263,8 @@ function agree(prior: number | null | undefined, next: number | null | undefined
         prior_trl: ctx.prior?.trl ?? '', new_trl: score.trl ?? '', a_trl: agree(ctx.prior?.trl, score.trl),
         prior_mrl: ctx.prior?.mrl ?? '', new_mrl: score.mrl ?? '', a_mrl: agree(ctx.prior?.mrl, score.mrl),
         prior_crl: ctx.prior?.crl ?? '', new_crl: score.crl ?? '', a_crl: agree(ctx.prior?.crl, score.crl),
-        prior_churchill: ctx.prior?.churchillStage ?? '', new_churchill: score.churchillStage ?? '', a_churchill: agree(ctx.prior?.churchillStage, score.churchillStage),
-        prior_substage: ctx.prior?.churchillSubstage ?? '', new_substage: score.churchillSubstage ?? '',
+        prior_msrl: ctx.prior?.msrl ?? '', new_msrl: score.msrl ?? '', a_msrl: agree(ctx.prior?.msrl, score.msrl),
+        new_msrl_label: score.msrlLabel ?? '', new_msrl_milestone: score.msrlNextMilestone ?? '',
         recordId,
         rationale: [score.techRationale, score.serviceRationale].filter(Boolean).join(' | '),
       });
@@ -274,7 +287,7 @@ function agree(prior: number | null | undefined, next: number | null | undefined
   // CSV review / acceptance artifact.
   const header = ['companyId', 'name', 'path', 'action', 'rescore', 'priorSource',
     'prior_trl', 'new_trl', 'a_trl', 'prior_mrl', 'new_mrl', 'a_mrl', 'prior_crl', 'new_crl', 'a_crl',
-    'prior_churchill', 'new_churchill', 'a_churchill', 'prior_substage', 'new_substage', 'recordId', 'rationale'];
+    'prior_msrl', 'new_msrl', 'a_msrl', 'new_msrl_label', 'new_msrl_milestone', 'recordId', 'rationale'];
   const lines = [header.join(',')];
   for (const r of rows.sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
     lines.push(header.map((h) => csv(h === 'rationale' && r.error ? `ERROR: ${r.error}` : r[h])).join(','));
@@ -294,7 +307,7 @@ function agree(prior: number | null | undefined, next: number | null | undefined
     `inScope=${stats.inScope}${gated ? ` unchanged=${stats.skippedUnchanged}` : ''} noRoute=${stats.skippedNoRoute} noInputs=${stats.skippedNoInputs} errors=${stats.error}.`);
   if (withPrior.length) {
     console.log(`Acceptance vs prior (${withPrior.length} companies with a prior assessment):`);
-    for (const k of ['a_trl', 'a_mrl', 'a_crl', 'a_churchill']) { const s = summarize(k); if (s) console.log('  ' + s); }
+    for (const k of ['a_trl', 'a_mrl', 'a_crl', 'a_msrl']) { const s = summarize(k); if (s) console.log('  ' + s); }
   }
   console.log(`Review CSV: reports/${tag}.csv`);
   console.log(`Full JSON:  reports/${tag}.json`);

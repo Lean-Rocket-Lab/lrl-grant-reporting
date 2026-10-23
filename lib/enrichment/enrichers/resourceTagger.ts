@@ -1,26 +1,36 @@
 // lib/enrichment/enrichers/resourceTagger.ts — classify a Resource (a technical-assistance provider
-// ORGANIZATION) into Brandon's 29-service taxonomy (Claude), then DERIVE its subway-map stops in code.
+// ORGANIZATION) into the service taxonomy (Claude), then DERIVE its subway-map stops in code.
 //
 // The record-targeted twin of the readiness tagger. Same design (LLM assigns service tags; code
 // derives stops via STOP_SERVICES) and the same taxonomy + deriveStops — only the classifier prompt
-// differs (it reasons about what services an ORG provides, not a person's expertise) and it writes to
-// custom_objects.resources fields instead of contact fields. Gating (resource_status) is config, not
-// code — enforced by the caller via lib/enrichment/gate.ts, editable in /enrichment.
+// differs (it reasons about what services an ORG provides, not a person's expertise).
+//
+// 2026-10-23: Resources MOVED onto the Profiles object (profile_type = resource;
+// docs/sprints/profiles-resources-merge.md). This enricher now reads and writes
+// custom_objects.profiles. The old custom_objects.resources object is a frozen archive and is never
+// written. On Profiles `service_areas` is a real multi-select, so tags are written as the option KEYS
+// (profileServiceKey), not the ';'-joined label string the Resources TEXT field held.
+// Gating (profile_type = Resource AND profile_status) is config, not code — enforced by the caller via
+// lib/enrichment/gate.ts, editable in /enrichment.
 
 import type { Provenance, RecordEnricher, RecordEnricherInput, RecordEnrichmentProposal } from '../types';
 import { hasAnthropic, classifyJson, CLASSIFIER_MODEL } from '../../ai/anthropic';
-import { SERVICES, SERVICE_KEYS, LINE_KEYS, deriveStops, normalizeTags, tagsToLabels, type ServiceTag, type LineKey } from '../data/readiness';
+import { SERVICES, SERVICE_KEYS, LINE_KEYS, LINE_STOP_BARE, deriveStops, normalizeTags, type ServiceTag, type LineKey } from '../data/readiness';
+import { profileServiceKey, PROFILES_OBJECT } from './profileTagger';
 
-/** Bare stop-field names on the resources object (contact uses the same, prefixed differently). */
-const STOP_BARE: Record<LineKey, string> = { MRL: 'mrl_stops', TRL: 'trl_stops', CRL: 'crl_stops', IRL: 'investor_readiness_stops' };
+/** The object resource profiles live on. */
+export const RESOURCE_TAGGER_OBJECT = PROFILES_OBJECT;
 
-/** Resource fields (bare) that describe what the organization does. */
+/** Bare stop-field names (identical on contact, profiles and the archived resources object). */
+const STOP_BARE: Record<LineKey, string> = LINE_STOP_BARE;
+
+/** Profile fields (bare) that describe what the organization does. */
 const PROFILE_FIELDS: Array<[key: string, label: string]> = [
-  ['resources', 'Name'],
+  ['display_name', 'Name'],
   ['category', 'Category'],
   ['sub_category', 'Sub-category'],
   ['short_description', 'Short description'],
-  ['full_description', 'Description'],
+  ['bio', 'Description'],
   ['website', 'Website'],
 ];
 
@@ -46,18 +56,21 @@ function taxonomyMenu(): string {
 
 export const RESOURCE_SYSTEM_PROMPT =
   `You classify a Lean Rocket Lab RESOURCE — a technical-assistance provider (an organization, fund, ` +
-  `firm, accelerator, or program) — into a fixed 29-service taxonomy, based on the services the ` +
-  `organization PROVIDES to startups. You assign ONLY service tags — you do NOT assign readiness ` +
+  `firm, accelerator, or program) — into a fixed service taxonomy, based on the services the ` +
+  `organization PROVIDES to startups and local businesses. You assign ONLY service tags — you do NOT assign readiness ` +
   `stages or stop numbers (code derives those from your tags).\n\n` +
   `TAXONOMY (id = label). Choose tag IDS only from this list:\n${taxonomyMenu()}\n\n` +
   `CROSSWALK — map an org's offering to tags consistently:\n` +
   `  law firm / IP or patent attorney → ip + legal; "SBIR/STTR support" / grant writing / proposal help → grants;\n` +
-  `  accelerator / incubator → bizmodel + fundraise (add gtm/market only if explicit); CDFI / fund / venture / angel\n` +
-  `  / "capital" → fundraise; SBIR/STTR match or grant fund → grants; SBDC / MEDC / EDC / economic development →\n` +
-  `  bizmodel + grants + market; accounting / CPA / fractional CFO / bookkeeping → finmodel; marketing / brand /\n` +
+  `  accelerator / incubator → bizmodel + fundraise (add gtm/market only if explicit); venture / angel / equity\n` +
+  `  fund / "capital" → fundraise (CDFI or bank LOANS → lending); SBIR/STTR match or grant fund → grants; SBDC / MEDC / EDC / economic development →\n` +
+  `  bizmodel + grants + market; accounting / CPA / fractional CFO → finmodel (pure bookkeeping → bookkeeping); marketing / brand /\n` +
   `  creative / video / storytelling / PR → marketing; contract manufacturer / machine shop → cm; prototyping /\n` +
   `  rapid prototype shop → proto; testing / certification / quality lab → test + quality; design-for-manufacturing\n` +
-  `  → dfm; supply chain / sourcing → supply; workforce / training → workforce; regulatory / compliance → regulatory.\n\n` +
+  `  → dfm; supply chain / sourcing → supply; workforce / training → workforce; regulatory / compliance → regulatory.\n` +
+  `  Main Street: bookkeeping / tax prep → bookkeeping; licensing / permits / insurance → licensing; commercial real\n` +
+  `  estate / site selection / landlord programs → realestate; bank / credit union / CDFI loan or microloan / SBA lending\n` +
+  `  → lending (equity funds stay fundraise); staffing / HR / recruiting → hr; SOPs / process / operations consulting → ops.\n\n` +
   `RULES:\n` +
   `  1. Explicit beats inferred — a stated service maps directly to its tag.\n` +
   `  2. Fewer, truer tags win. Return AT MOST 3, usually 1–2. An org is placed at every subway stop its tags touch,\n` +
@@ -105,14 +118,10 @@ export function buildResourceProposals(
       { fieldKey: `${objectKey}.readiness_rationale`, value: rationaleText || 'No clear service identified.', provenance },
     ];
   }
-  // The 4 stop fields are MULTIPLE_OPTIONS again (2026-08-17): they were briefly TEXT holding a
-  // ';'-joined list, back when object multi-selects looked unwritable on update. They take real
-  // arrays now, so staff get dropdowns instead of hand-edited strings.
-  // `service_areas` is still TEXT (29 labels, not yet flipped) — hence the join below. The write
-  // path tolerates either shape, so the two can be migrated independently.
+  // Stops and service_areas are MULTIPLE_OPTIONS on Profiles: service tags go in as option KEYS.
   const stops = deriveStops(tags);
   const out: RecordEnrichmentProposal[] = [
-    { fieldKey: `${objectKey}.service_areas`, value: tagsToLabels(tags).join('; '), provenance },
+    { fieldKey: `${objectKey}.service_areas`, value: tags.map(profileServiceKey), provenance },
   ];
   for (const line of LINE_KEYS) out.push({ fieldKey: `${objectKey}.${STOP_BARE[line]}`, value: stops[line].map(String), provenance });
   out.push({ fieldKey: `${objectKey}.readiness_confidence`, value: confidence, provenance });
@@ -132,16 +141,13 @@ export function buildResourceProposals(
 export const resourceTagger: RecordEnricher = {
   name: 'resource-tagger',
   description:
-    'Classify a Resource (technical-assistance provider) into the 29-service taxonomy (Claude) and ' +
-    'derive subway-map stops. Status gate is configurable (default: resource_status = Approved).',
+    'Classify a Resource profile (technical-assistance provider) into the service taxonomy (Claude) and ' +
+    'derive subway-map stops. Gate is configurable (default: profile_type = Resource, Approved/Published).',
   produces: [
-    'custom_objects.resources.service_areas',
-    'custom_objects.resources.mrl_stops',
-    'custom_objects.resources.trl_stops',
-    'custom_objects.resources.crl_stops',
-    'custom_objects.resources.investor_readiness_stops',
-    'custom_objects.resources.readiness_confidence',
-    'custom_objects.resources.readiness_rationale',
+    `${PROFILES_OBJECT}.service_areas`,
+    ...LINE_KEYS.map((line) => `${PROFILES_OBJECT}.${LINE_STOP_BARE[line]}`),
+    `${PROFILES_OBJECT}.readiness_confidence`,
+    `${PROFILES_OBJECT}.readiness_rationale`,
   ],
 
   async enrich(input: RecordEnricherInput): Promise<RecordEnrichmentProposal[]> {

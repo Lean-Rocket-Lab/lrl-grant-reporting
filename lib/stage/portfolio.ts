@@ -13,12 +13,16 @@
 import { GhlClient, ghl } from '../ghl/client';
 import { STAGE_OBJECT } from './priorAssessment';
 
-/** The four scales a stage record can carry. `churchill` is the service path, the rest are tech. */
-export const SCALES = ['trl', 'mrl', 'crl', 'churchill'] as const;
+/** The scales a stage record can carry. `msrl` (headline) is the service path, trl/mrl/crl are tech.
+ *  msrl_demand / msrl_model / msrl_operations are MSRL's dimensions: the framework reports "moving up a
+ *  rung in any dimension" so progress shows even when the headline holds. Churchill was retired 2026-10-21. */
+export const SCALES = ['trl', 'mrl', 'crl', 'msrl', 'msrl_demand', 'msrl_model', 'msrl_operations'] as const;
+/** Scales that count toward `advanced` (dimensions are excluded so MSRL isn't counted four times). */
+export const HEADLINE_SCALES: ReadonlySet<Scale> = new Set<Scale>(['trl', 'mrl', 'crl', 'msrl']);
 export type Scale = (typeof SCALES)[number];
 
 /** Highest value each scale can take, for axis construction. */
-export const SCALE_MAX: Record<Scale, number> = { trl: 9, mrl: 10, crl: 9, churchill: 5 };
+export const SCALE_MAX: Record<Scale, number> = { trl: 9, mrl: 10, crl: 9, msrl: 9, msrl_demand: 9, msrl_model: 9, msrl_operations: 9 };
 
 export interface ScorePair {
   /** Earliest non-null value for this scale, i.e. where the company came in. */
@@ -37,7 +41,10 @@ export interface PortfolioRow {
   firstDate: string | null;
   lastDate: string | null;
   scores: Record<Scale, ScorePair>;
-  /** Sum of (current - initial) across every scale where both ends exist. */
+  /** Latest MSRL path (Sustain/Grow) and label, for the S/G mix and the table. */
+  msrlPath: string | null;
+  msrlLabel: string | null;
+  /** Sum of (current - initial) across every HEADLINE scale where both ends exist. */
   advanced: number;
   /** How many scales contributed to `advanced`. Zero means the number is not meaningful. */
   scalesCompared: number;
@@ -105,6 +112,15 @@ async function searchAllRecords(objectKey: string, client: GhlClient): Promise<a
   return out;
 }
 
+/** Latest non-empty string value of a property across date-sorted records. */
+const latestStr = (sorted: any[], key: string): string | null => {
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const v = str(sorted[i]?.properties?.[key]);
+    if (v) return v;
+  }
+  return null;
+};
+
 /** The company a stage record is associated to, via the `business` side of its relations. */
 const companyIdOf = (record: any): string | null =>
   record?.relations?.find((r: any) => r?.objectKey === 'business')?.recordId ?? null;
@@ -117,14 +133,13 @@ const orderKey = (record: any): string =>
  * Fold a company's stage records into one row.
  *
  * `initial` and `current` are resolved PER SCALE rather than per record, because a single company can
- * have records that carry only the Churchill score and records that carry only TRL/MRL/CRL (the scorer
+ * have records that carry only the MSRL scores and records that carry only TRL/MRL/CRL (the scorer
  * routes on business model). Taking scale values off the first and last records wholesale would read
  * a missing value as "no history" for exactly the companies that switched paths.
  */
 export function foldCompanyRecords(companyId: string, name: string, businessModel: string | null, records: any[]): PortfolioRow {
   const sorted = records.slice().sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
-  const valueOf = (rec: any, scale: Scale) =>
-    num(rec?.properties?.[scale === 'churchill' ? 'churchill_score' : scale]);
+  const valueOf = (rec: any, scale: Scale) => num(rec?.properties?.[scale]);
 
   const scores = {} as Record<Scale, ScorePair>;
   let advanced = 0;
@@ -139,7 +154,7 @@ export function foldCompanyRecords(companyId: string, name: string, businessMode
       current = v;
     }
     scores[scale] = { initial, current };
-    if (initial != null && current != null) {
+    if (initial != null && current != null && HEADLINE_SCALES.has(scale)) {
       advanced += current - initial;
       scalesCompared++;
     }
@@ -153,6 +168,8 @@ export function foldCompanyRecords(companyId: string, name: string, businessMode
     firstDate: str(sorted[0]?.properties?.rescore_date),
     lastDate: str(sorted[sorted.length - 1]?.properties?.rescore_date),
     scores,
+    msrlPath: latestStr(sorted, 'msrl_path'),
+    msrlLabel: latestStr(sorted, 'msrl_label'),
     advanced,
     scalesCompared,
   };

@@ -59,17 +59,19 @@ describe('routePath', () => {
 });
 
 describe('companyInputs', () => {
-  it('tech path pulls TRL/MRL/CRL inputs but not Churchill-only ones', () => {
+  it('tech path pulls TRL/MRL/CRL inputs but not MSRL-only ones', () => {
     const keys = inputsForDimensions(PATH_DIMENSIONS.tech).map((i) => i.businessKey);
     expect(keys).toContain('business.tech_product_state'); // TRL
     expect(keys).toContain('business.mfg_method'); // MRL
     expect(keys).toContain('business.selling_stage'); // CRL
-    expect(keys).not.toContain('business.owner_involvement'); // Churchill-only
+    expect(keys).not.toContain('business.owner_involvement'); // MSRL-only
   });
-  it('service path pulls only Churchill inputs (+ shared context/revenue)', () => {
+  it('service path pulls only MSRL inputs (+ shared context/revenue)', () => {
     const keys = inputsForDimensions(PATH_DIMENSIONS.service).map((i) => i.businessKey);
     expect(keys).toContain('business.owner_involvement');
-    expect(keys).toContain('business.annual_revenue'); // shared crl+churchill
+    expect(keys).toContain('business.annual_revenue'); // shared crl+msrl
+    expect(keys).toContain('business.msrl_owner_path');
+    expect(keys).toContain('business.physical_footprint');
     expect(keys).not.toContain('business.tech_product_state');
   });
   it('labelResolvingAccessor maps option keys → labels (arrays too), passes non-option fields through', () => {
@@ -106,25 +108,28 @@ describe('companyInputs', () => {
 });
 
 describe('buildScoreSchema', () => {
-  it('tech schema requires trl/mrl/crl + tech_rationale, no churchill', () => {
+  it('tech schema requires trl/mrl/crl + tech_rationale, no msrl', () => {
     const s = buildScoreSchema(PATH_DIMENSIONS.tech) as any;
     expect(s.required.sort()).toEqual(['crl', 'mrl', 'tech_rationale', 'trl']);
-    expect(s.properties.churchill_score).toBeUndefined();
+    expect(s.properties.msrl_demand).toBeUndefined();
     // Structured outputs reject minimum/maximum on integers — bound lives in the description + clamp.
     expect(s.properties.trl).toMatchObject({ type: 'integer' });
     expect(s.properties.trl.minimum).toBeUndefined();
     expect(s.properties.trl.description).toContain('1-9');
     expect(s.properties.mrl.description).toContain('1-10');
   });
-  it('service schema requires churchill fields only', () => {
+  it('service schema requires MSRL fields only, and never asks the model for a headline', () => {
     const s = buildScoreSchema(PATH_DIMENSIONS.service) as any;
-    expect(s.required.sort()).toEqual(['churchill_score', 'churchill_substage', 'service_rationale']);
+    expect(s.required.sort()).toEqual(['msrl_demand', 'msrl_flags', 'msrl_lens', 'msrl_lens_inferred', 'msrl_model',
+      'msrl_next_rung', 'msrl_operations', 'msrl_path', 'msrl_path_inferred', 'service_rationale']);
     expect(s.properties.trl).toBeUndefined();
-    expect(s.properties.churchill_substage.enum).toEqual(['III-D', 'III-G', 'N/A']);
+    expect(s.properties.msrl).toBeUndefined(); // headline is computed in code
+    expect(s.properties.msrl_path.enum).toEqual(['S', 'G']);
+    expect(s.properties.msrl_lens.enum).toHaveLength(6);
   });
   it('both schema requires every field', () => {
     const s = buildScoreSchema(PATH_DIMENSIONS.both) as any;
-    expect(s.required).toEqual(expect.arrayContaining(['trl', 'mrl', 'crl', 'tech_rationale', 'churchill_score', 'churchill_substage', 'service_rationale']));
+    expect(s.required).toEqual(expect.arrayContaining(['trl', 'mrl', 'crl', 'tech_rationale', 'msrl_demand', 'msrl_model', 'msrl_operations', 'service_rationale']));
   });
 });
 
@@ -134,27 +139,37 @@ describe('buildScorePrompt', () => {
     expect(user).toContain('Technology Readiness Level');
     expect(user).toContain('Manufacturing Readiness Level');
     expect(user).toContain('Commercial Readiness Level');
-    expect(user).not.toContain('Churchill');
+    expect(user).not.toContain('MSRL');
     expect(user).toContain('Client information:\nCompany: X');
   });
-  it('service path includes Churchill only', () => {
+  it('service path includes MSRL only', () => {
     const { user } = buildScorePrompt({ path: 'service', inputBlob: 'Company: Y' });
-    expect(user).toContain('Churchill');
+    expect(user).toContain('Main Street Readiness Level');
+    expect(user).not.toContain('Churchill');
     expect(user).not.toContain('Technology Readiness Level');
   });
-  it('Churchill path carries the decision procedure + conservative conflict rule (stability guardrails)', () => {
+  it('MSRL path carries the rung-by-rung rule, lens table, seasonality and flags', () => {
     const { user } = buildScorePrompt({ path: 'service', inputBlob: 'Company: Y' });
-    // The primary-signal guidance + conservative tie-break are what stabilize the classifier.
     expect(user).toContain('Primary-signal guidance:');
-    expect(user).toContain('STOP at the');            // stop-at-first-fit decision procedure
-    expect(user).toContain('more conservative');       // conflict → lower stage
-    expect(user).toMatch(/cannot be past Stage 2 without a real product/);
-    // A solo/owner-run "profitable" business must not be pushed to Stage 3 by the label alone.
-    expect(user).toMatch(/never let a "profitable" label/);
+    expect(user).toContain('the LOWER one is correct');
+    expect(user).toContain('missing evidence means NOT met');
+    expect(user).toContain('90 IN-SEASON days');
+    expect(user).toContain('Food and beverage');
+    expect(user).toMatch(/P6 Certificate of occupancy: .*needed to clear level 3/);
+    expect(user).toMatch(/P9 Replicable site: .*level 9 G/);
+  });
+  it('a Churchill-era prior is presented as the first MSRL baseline', () => {
+    const prior: PriorAssessment = {
+      trl: null, mrl: null, crl: null, msrl: null, msrlDemand: null, msrlModel: null, msrlOperations: null, msrlPath: null,
+      techRationale: null, serviceRationale: 'Churchill Stage = 2', source: 'record',
+    };
+    const { user } = buildScorePrompt({ path: 'service', inputBlob: 'Company: Y', prior });
+    expect(user).toContain('first MSRL assessment');
+    expect(user).not.toContain('Churchill Stage = 2');
   });
   it('adds a Previous assessment block on re-score', () => {
     const prior: PriorAssessment = {
-      trl: 4, mrl: 3, crl: 2, churchillStage: null, churchillSubstage: null,
+      trl: 4, mrl: 3, crl: 2, msrl: null, msrlDemand: null, msrlModel: null, msrlOperations: null, msrlPath: null,
       techRationale: 'prior tech note', serviceRationale: null, source: 'record',
     };
     const { user } = buildScorePrompt({ path: 'tech', inputBlob: 'Company: Z', prior });
@@ -170,13 +185,35 @@ describe('parseScoreResult', () => {
     expect(out.trl).toBe(9);
     expect(out.mrl).toBe(1);
     expect(out.crl).toBe(5);
-    expect(out.churchillStage).toBeUndefined();
+    expect(out.msrl).toBeUndefined();
   });
-  it('forces sub-stage to N/A unless the Churchill stage is exactly 3', () => {
-    const notThree = parseScoreResult({ churchill_score: 2, churchill_substage: 'III-G', service_rationale: 'x' }, 'service', 'm', false)!;
-    expect(notThree.churchillSubstage).toBe('N/A');
-    const three = parseScoreResult({ churchill_score: 3, churchill_substage: 'III-G', service_rationale: 'x' }, 'service', 'm', false)!;
-    expect(three.churchillSubstage).toBe('III-G');
+  const msrlRaw = (over: Record<string, unknown> = {}) => ({
+    msrl_demand: 7, msrl_model: 4, msrl_operations: 6, msrl_path: 'G', msrl_path_inferred: true,
+    msrl_lens: 'Food and beverage', msrl_lens_inferred: true, msrl_flags: [],
+    msrl_next_rung: { demand: 'd gap', model: 'm gap', operations: 'o gap' }, service_rationale: 'r', ...over,
+  });
+  it('MSRL headline = lowest dimension, computed in code, with the bottleneck milestone', () => {
+    const out = parseScoreResult(msrlRaw(), 'service', 'm', false)!;
+    expect(out).toMatchObject({ msrl: 4, msrlDemand: 7, msrlModel: 4, msrlOperations: 6, msrlBottleneck: 'model', msrlNextMilestone: 'm gap' });
+    expect(out.msrlLabel).toBe('MSRL 4-G (D7 / M4 / O6)');
+  });
+  it('stated path and lens beat the model; clamps out-of-range dimensions', () => {
+    const out = parseScoreResult(msrlRaw({ msrl_demand: 12, msrl_model: 0 }), 'service', 'm', false, { statedPath: 'S', statedLens: 'Retail storefront' })!;
+    expect(out.msrlPath).toBe('S');
+    expect(out.msrlPathInferred).toBe(false);
+    expect(out.msrlLens).toBe('Retail storefront');
+    expect(out.msrlDemand).toBe(9);
+    expect(out.msrl).toBe(1);
+  });
+  it('an open flag caps the headline only on a commercial site', () => {
+    const flags = [{ id: 'P6', status: 'open' }, { id: 'P1', status: 'unknown' }];
+    const home = parseScoreResult(msrlRaw({ msrl_flags: flags }), 'service', 'm', false, { commercialSite: false })!;
+    expect(home.msrl).toBe(4);
+    expect(home.msrlOpenFlags).toEqual([]);
+    const shop = parseScoreResult(msrlRaw({ msrl_flags: flags }), 'service', 'm', false, { commercialSite: true })!;
+    expect(shop.msrl).toBe(2); // P6 must clear for level 3 → capped at 2; unknown P1 does not cap
+    expect(shop.msrlCappedBy).toBe('P6');
+    expect(shop.msrlLabel).toBe('MSRL 2-G (D7 / M4 / O6) · capped by P6');
   });
   it('returns null when a required score is missing/non-numeric', () => {
     expect(parseScoreResult({ mrl: 3, crl: 4, tech_rationale: 'x' }, 'tech', 'm', false)).toBeNull();
@@ -195,10 +232,13 @@ describe('scoreCompany', () => {
     expect(out).toMatchObject({ path: 'tech', trl: 4, mrl: 3, crl: 5, rescore: false });
   });
   it('marks rescore=true when a prior is supplied', async () => {
-    mockClassify.mockResolvedValue({ churchill_score: 3, churchill_substage: 'III-D', service_rationale: 'n' });
-    const prior: PriorAssessment = { trl: null, mrl: null, crl: null, churchillStage: 2, churchillSubstage: 'N/A', techRationale: null, serviceRationale: null, source: 'contact-fields' };
+    mockClassify.mockResolvedValue({
+      msrl_demand: 3, msrl_model: 3, msrl_operations: 5, msrl_path: 'S', msrl_path_inferred: false, msrl_lens: 'Appointment services',
+      msrl_lens_inferred: false, msrl_flags: [], msrl_next_rung: { demand: 'a', model: 'b', operations: 'c' }, service_rationale: 'n',
+    });
+    const prior: PriorAssessment = { trl: null, mrl: null, crl: null, msrl: 2, msrlDemand: 2, msrlModel: 3, msrlOperations: 4, msrlPath: 'Sustain', techRationale: null, serviceRationale: null, source: 'record' };
     const out = await scoreCompany({ field: fieldOf({ 'business.owner_involvement': 'full time' }), path: 'service', prior });
-    expect(out).toMatchObject({ path: 'service', churchillStage: 3, churchillSubstage: 'III-D', rescore: true });
+    expect(out).toMatchObject({ path: 'service', msrl: 3, msrlBottleneck: 'demand', msrlNextMilestone: 'a', rescore: true });
   });
   it('returns null (no call) when there are no inputs to score from', async () => {
     const out = await scoreCompany({ field: fieldOf({}), path: 'tech' });

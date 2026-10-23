@@ -34,7 +34,7 @@ const SELF_ENFORCING = [
   '/api/wix-sync',
   '/api/appointment-sync',
   '/api/opportunity-sync',
-  '/api/resource-sync',
+  '/api/profile-sync', // replaced /api/resource-sync 2026-10-23 (Resources moved onto Profiles)
   '/api/readiness-tag',
 ];
 

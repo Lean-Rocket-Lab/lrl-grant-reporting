@@ -26,11 +26,20 @@ import { getContact } from './contacts';
 import { readRecordFields } from './records';
 import { normalizeName } from '../dedup/normalize';
 
-/** Association definitions on the live location (both created 2026-08-17). */
-export const RESOURCE_CONTACT_ASSOCIATION_ID = '6a7a0a401b4a19424298a73d';
-export const RESOURCE_COMPANY_ASSOCIATION_ID = '6a7a0a1d62d53d4b44142023';
+/**
+ * Association definitions on the live location. 2026-10-23: resources moved onto the Profiles object
+ * (profile_type = resource; docs/sprints/profiles-resources-merge.md), so these are now the PROFILE
+ * associations — read back that day with the same sides the resource ones had:
+ *   profile_contact  6ad81f751f3a6ce0ea97740a  first = contact,  second = profile
+ *   profile_company  6adb83db4d273170ee7dd243  first = business, second = profile
+ * (Archived: resource_contact 6a7a0a401b4a19424298a73d, resource_company 6a7a0a1d62d53d4b44142023.)
+ * Person profiles get the same guarantee for free if this is ever called on one.
+ */
+export const RESOURCE_CONTACT_ASSOCIATION_ID = '6ad81f751f3a6ce0ea97740a';
+export const RESOURCE_COMPANY_ASSOCIATION_ID = '6adb83db4d273170ee7dd243';
 
-export const RESOURCES_OBJECT = 'custom_objects.resources';
+/** The object resource records live on (was custom_objects.resources until 2026-10-23). */
+export const RESOURCES_OBJECT = 'custom_objects.profiles';
 
 export interface ResourceCompanyLinkResult {
   status: 'already-linked' | 'linked' | 'needs-review' | 'error';

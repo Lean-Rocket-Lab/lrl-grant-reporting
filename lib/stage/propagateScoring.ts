@@ -1,8 +1,8 @@
 // lib/stage/propagateScoring.ts — push a just-written stage record's scores UP to the company.
 //
 // After the scorer writes/updates a `custom_objects.business_stage` record, the company's
-// `*_current` fields (trl_current, mrl_current, crl_current, churchill_current,
-// churchill_substage_current, latest_tech_stage_rationale) should reflect the latest scores so the
+// `*_current` fields (trl_current, mrl_current, crl_current, msrl_current, msrl_demand_current,
+// msrl_model_current, msrl_operations_current, msrl_path_current, msrl_label_current, latest_tech_stage_rationale) should reflect the latest scores so the
 // company record — and the reports/embeds that read it — show current numbers without opening the
 // stage-tracking history.
 //

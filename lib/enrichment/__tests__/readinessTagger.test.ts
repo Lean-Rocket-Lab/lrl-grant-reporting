@@ -125,7 +125,7 @@ describe('readinessTagger.enrich', () => {
 });
 
 describe('rederiveProposals (no LLM)', () => {
-  it('re-derives the 4 stop fields from existing service_areas labels', () => {
+  it('re-derives every stop field from existing service_areas labels', () => {
     const out = rederiveProposals(makeInput({
       'contact.website_team_tags': ['Team'],
       'contact.service_areas': ['Go-to-Market Strategy', 'Contract Manufacturing'],
@@ -163,9 +163,10 @@ describe('deriveProfileText', () => {
 });
 
 describe('buildProposals', () => {
-  it('produces 7 proposals with computed provenance for the given method', () => {
+  it('produces 8 proposals (5 stop lines incl. MSRL) with computed provenance for the given method', () => {
     const out = buildProposals(['ip', 'legal'], 'Medium', false, 'IP + contracts', 'ai');
-    expect(out).toHaveLength(7);
+    expect(out).toHaveLength(8);
+    expect(out.map((p) => p.contactKey)).toContain('contact.msrl_stops');
     expect(out.every((p) => p.provenance.confidence === 0.6)).toBe(true);
   });
   it('returns [] for no tags', () => {

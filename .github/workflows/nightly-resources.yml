@@ -1,31 +1,35 @@
-name: Nightly resources (tag + sync)
+name: Nightly profiles (tag resources + people)
 
-# Backstop for the Resources pipeline: tag (resource-tagger) then sync GHL Resources → Wix `Import1`.
+# Backstop for the Profile pipeline (/api/profile-sync, fired by the GHL "Profile Changed" workflow).
 #
-# WHY THIS EXISTS: /api/resource-sync was built in July but nothing called it, so the 2026-08-07
-# "Become a Resource" submission sat unsynced for 11 days. The real-time path is a GHL workflow on
-# the Resources object (Record Changed → POST /api/resource-sync); this workflow is the safety net
-# for a webhook that doesn't fire, exactly like nightly-readiness.yml is for contacts.
+# 2026-10-23: Resources moved onto the Profiles object (profile_type = resource;
+# docs/sprints/profiles-resources-merge.md). Both taggers now run over custom_objects.profiles, each
+# behind its own gate (resource-tagger: Resource + Approved/Published; profile-tagger: Person +
+# Approved/Published + Team/EIR). Both are equality-guarded with a derived rationale, so an
+# unchanged profile re-tags to zero writes.
+#
+# The Wix Resources sync step was REMOVED: Zach froze Wix on 2026-10-23 until the new site launches
+# (the "Resources → Wix Resources" mapping set is disabled in Postgres too).
 #
 # 08:45 UTC, after nightly-readiness (08:30) so the two AI sweeps don't overlap.
-#
-# The set's resource_status gate decides per record: Pending → skip · Approved → create + publish ·
-# Published → update · Hidden → unpublish. Match is id ↔ ghlResourceId, so this never creates a
-# duplicate Wix row. Writes are equality-guarded end to end (field values, images and references),
-# so a clean night should report all `noop` and write nothing.
-#
-# GHL_MAX_RPS=3 keeps writes at ≥0.3s spacing (the client also backs off on 429).
 
 on:
   schedule:
-    # 08:45 UTC = 4:45am EDT / 3:45am EST. Cron is UTC.
     - cron: '45 8 * * *'
   workflow_dispatch: {} # allow manual runs from the Actions tab
 
 jobs:
-  resources:
+  profiles:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      GHL_TARGET: live
+      GHL_MAX_RPS: 3
+      GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
+      GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
+      GHL_CUSTOM_OBJECT_ID: ${{ secrets.GHL_CUSTOM_OBJECT_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -34,41 +38,18 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - name: Tag resources (apply, live) — backstop for missed Approved webhooks
-        # Default gate = resource_status ∈ {Approved, Published}; the tagger is equality-guarded and
-        # the rationale is a derived field, so an unchanged resource re-tags to zero writes.
+      - name: Tag resource profiles (apply, live)
         run: npx vite-node scripts-ts/resources-tag-run.ts --apply --yes
-        env:
-          GHL_TARGET: live
-          GHL_MAX_RPS: 3
-          GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
-          GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
-          GHL_CUSTOM_OBJECT_ID: ${{ secrets.GHL_CUSTOM_OBJECT_ID }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
-      - name: Sync resources → Wix (apply, live)
-        # No --set-status: statuses are already stamped, and the gate must stay in charge of who
-        # syncs. No --updated-since either: a nightly full pass is the point of a backstop, and with
-        # the guards in place an unchanged record is a cheap noop.
-        run: npx vite-node scripts-ts/resources-sync-run.ts --apply --yes
-        env:
-          GHL_TARGET: live
-          GHL_MAX_RPS: 3
-          GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
-          GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
-          GHL_CUSTOM_OBJECT_ID: ${{ secrets.GHL_CUSTOM_OBJECT_ID }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          # NEW SECRETS — add these two in Settings → Secrets and variables → Actions.
-          WIX_API_TOKEN: ${{ secrets.WIX_API_TOKEN }}
-          WIX_SITE_ID: ${{ secrets.WIX_SITE_ID }}
+      - name: Tag person profiles (apply, live)
+        if: always()
+        run: npx vite-node scripts-ts/profiles-tag-run.ts --apply --yes
 
-      - name: Upload resources report
+      - name: Upload profiles report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: resources-report
+          name: profiles-report
           path: reports/
           if-no-files-found: ignore
           retention-days: 14

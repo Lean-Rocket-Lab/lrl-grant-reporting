@@ -13,7 +13,8 @@ import { GhlClient, ghl } from '../ghl/client';
 import { getRelatedRecordIds } from '../ghl/associations';
 import type { ReferredTo } from './schema';
 
-export const RESOURCES_OBJECT = 'custom_objects.resources';
+/** Resource records live on Profiles since 2026-10-23 (profile_type = resource). */
+export const RESOURCES_OBJECT = 'custom_objects.profiles';
 
 /**
  * Add the company behind a picked Resource, and the company behind a picked Contact.

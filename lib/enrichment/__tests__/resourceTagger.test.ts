@@ -7,7 +7,8 @@ import { resourceTagger, buildResourceProposals, deriveResourceText } from '../e
 import type { RecordEnricherInput } from '../types';
 
 const mockClassify = classifyJson as unknown as ReturnType<typeof vi.fn>;
-const OBJ = 'custom_objects.resources';
+// Resources moved onto Profiles 2026-10-23 (profile_type = resource).
+const OBJ = 'custom_objects.profiles';
 
 function makeInput(fields: Record<string, unknown>): RecordEnricherInput {
   return {
@@ -22,18 +23,18 @@ beforeEach(() => mockClassify.mockReset());
 
 describe('deriveResourceText', () => {
   it('assembles a labeled blob from the resource fields, skipping empties', () => {
-    const text = deriveResourceText(makeInput({ resources: 'Endurance Law Group', category: 'Business Services', sub_category: 'Legal', short_description: 'IP specialists', full_description: '' }).field);
+    const text = deriveResourceText(makeInput({ display_name: 'Endurance Law Group', category: 'Business Services', sub_category: 'Legal', short_description: 'IP specialists', bio: '' }).field);
     expect(text).toContain('Name: Endurance Law Group');
     expect(text).toContain('Category: Business Services');
     expect(text).toContain('Sub-category: Legal');
-    expect(text).not.toContain('Description:'); // full_description empty
+    expect(text).not.toContain('\nDescription:'); // bio empty ("Short description:" is present)
   });
 });
 
 describe('resourceTagger.enrich', () => {
   it('classifies an org and writes resource-object field keys + derived stops', async () => {
     mockClassify.mockResolvedValue({ serviceTags: ['ip', 'legal', 'nope'], confidence: 'High', verify: false, rationale: 'IP law firm' });
-    const out = await resourceTagger.enrich(makeInput({ resources: 'Endurance Law Group', sub_category: 'Legal', short_description: 'Intellectual property specialists' }));
+    const out = await resourceTagger.enrich(makeInput({ display_name: 'Endurance Law Group', sub_category: 'Legal', short_description: 'Intellectual property specialists' }));
     const byKey = Object.fromEntries(out.map((p) => [p.fieldKey, p.value]));
     expect(byKey[`${OBJ}.service_areas`]).toBeDefined();
     expect(byKey[`${OBJ}.mrl_stops`]).toBeDefined();
@@ -42,11 +43,11 @@ describe('resourceTagger.enrich', () => {
     expect(out[0].provenance.source).toBe('anthropic');
   });
 
-  // The stop fields went TEXT (';'-joined) → MULTIPLE_OPTIONS on 2026-08-17. They must emit real
-  // ARRAYS so the modifier writer can diff them; `service_areas` is still TEXT, so it stays joined.
-  it('emits stops as arrays of option keys, and service_areas as a delimited string', async () => {
+  // Stops AND service_areas are MULTIPLE_OPTIONS on Profiles: real ARRAYS of option keys, so the
+  // modifier writer can diff them. service_areas keys come from profileServiceKey (2026-10-23).
+  it('emits stops and service_areas as arrays of option keys', async () => {
     mockClassify.mockResolvedValue({ serviceTags: ['ip', 'legal'], confidence: 'High', verify: false, rationale: 'IP law firm' });
-    const out = await resourceTagger.enrich(makeInput({ resources: 'Endurance Law Group', short_description: 'IP specialists' }));
+    const out = await resourceTagger.enrich(makeInput({ display_name: 'Endurance Law Group', short_description: 'IP specialists' }));
     const byKey = Object.fromEntries(out.map((p) => [p.fieldKey, p.value]));
 
     for (const line of ['mrl_stops', 'trl_stops', 'crl_stops', 'investor_readiness_stops']) {
@@ -54,7 +55,7 @@ describe('resourceTagger.enrich', () => {
       expect(Array.isArray(v), `${line} must be an array, got ${JSON.stringify(v)}`).toBe(true);
       expect((v as unknown[]).every((x) => typeof x === 'string')).toBe(true);
     }
-    expect(typeof byKey[`${OBJ}.service_areas`]).toBe('string');
+    expect(byKey[`${OBJ}.service_areas`]).toEqual(['ip_patents', 'legal_contracts']);
   });
 
   it('no clear service → records confidence + rationale only (no placement fields)', async () => {
@@ -73,12 +74,13 @@ describe('resourceTagger.enrich', () => {
 });
 
 describe('buildResourceProposals', () => {
-  it('produces service_areas + 4 stop fields + confidence + rationale for tags', () => {
+  it('produces service_areas + 5 stop fields (incl. MSRL) + confidence + rationale for tags', () => {
     const out = buildResourceProposals(OBJ, ['gtm'], 'Medium', false, 'gtm', 'ai');
     const keys = out.map((p) => p.fieldKey);
     expect(keys).toContain(`${OBJ}.service_areas`);
     expect(keys).toContain(`${OBJ}.crl_stops`);
-    expect(out.length).toBe(7);
+    expect(keys).toContain(`${OBJ}.msrl_stops`);
+    expect(out.length).toBe(8);
   });
   it('empty tags → only confidence + rationale', () => {
     const out = buildResourceProposals(OBJ, [], 'Low', true, 'x', 'ai');

@@ -22,7 +22,7 @@ const SELF_ENFORCING = [
   'wix-sync.ts',
   'appointment-sync.ts',
   'opportunity-sync.ts',
-  'resource-sync.ts',
+  'profile-sync.ts',
   'readiness-tag.ts',
 ];
 

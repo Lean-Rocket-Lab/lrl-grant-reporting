@@ -181,6 +181,150 @@
 
 ---
 
+## 🔄 2026-10-21 — Churchill → MSRL (Main Street Readiness Level): CODE DONE, nothing live yet
+
+Spec + rollout: **`docs/sprints/msrl-migration.md`**. Zach's calls: LLM rubric scorer (code computes the
+headline = lowest of Demand/Model/Operations + place-flag cap), replace Churchill 1:1 on service/both
+paths, **delete Churchill after an archive**, fully automatic (no coach confirm yet).
+
+- ✅ Scorer, stage record, company `*_current` propagation, Readiness Map, Profiles + Resources taggers
+  (5th subway line `MSRL`, 6 new Main Street services), Wix embed + backend. 780/780 tests, typecheck clean.
+- ⚠️ **Do NOT deploy before phase 1** (`scripts-ts/msrl-fields-setup.ts --apply`): the scorer would write
+  `msrl_*` to a business_stage object that lacks them.
+- ⬜ Phase 2 wiring (mapping rows, Wix columns, GHL form questions + results email: manual) · phase 4
+  baseline `stage-score-run.ts --paths service,both` · phase 5 `msrl-churchill-retire.ts`.
+- ⬜ Brandon to review `STOP_SERVICES.MSRL` + the 6 new services (extends his providers-db taxonomy).
+
+## ✅ 2026-10-21 — Blog + podcast moved from Wix to GHL Blogs (56 posts LIVE, verified)
+
+- Two GHL blogs: **Lean Rocket Lab Blog** (`nBgnqZPgrnjjzlKSOMLB`, 47 posts) and **Startup Storytelling Podcast**
+  (`Dt6fvY39MGeFgPl88q0k`, episodes 1-9). All PUBLISHED with original slugs + first-published dates.
+- Every cover + inline image re-hosted to GHL Media folder "Blog Migration"; zero wixstatic urls left.
+  13 posts got generated LRL title-card covers. Eps 7-9 had no Wix post: notes from YouTube, new titles.
+- **Author + categories added same day** (`scripts-ts/blog-migrate-update.ts`): all 56 have author "Lean Rocket Lab"
+  and GHL categories (8; "Podcast" -> "Startup Storytelling Podcast"; "AI Software" stays a tag only). Use
+  CATEGORIES to filter in widgets: the posts LIST endpoint returns categories but omits tags and body.
+- ⚠️ **Staging canonicals:** the blog domain is connected to apply.leanrocketlab.org while Wix still serves the same
+  posts, so the 53 Wix-origin posts carry `canonicalLink` = their live Wix url. **At cutover run
+  `CANONICAL=new tsx scripts-ts/blog-migrate-update.ts --apply`** (clears them) + apply redirect-map.csv.
+- `--verify`: 56 planned, 56 live, 0 problems (images, player, dates, tags, no duplicates).
+- Redirect map for cutover: `reports/blog-migration/redirect-map.csv` (53 old Wix `/post/<slug>` urls).
+- Spec + rerun steps: `docs/sprints/blog-migration.md`. Ledger: `reports/blog-migration/ledger.json`.
+
+## ✅ 2026-10-22 — Client logos: Wix → GHL company records; logo field convention settled
+
+**Convention (website reads ONE field):**
+| Field | Role |
+|---|---|
+| `business.website_logo_url` (TEXT, label "Logo: Website (Media Library URL)") | **The website logo.** Public GHL Media Library CDN URL of the prepared square PNG (Media Library › Website › Client Logos, folder `6ada99ddac05a0d91fd3a6d4`). |
+| `business.logo` (FILE_UPLOAD, label "Logo: Original from Client") | Raw file the client sent (also where `contact.company_logo` syncs). Never displayed as-is. |
+| `business.companylogo` (FILE_UPLOAD, "Company Logo") | GHL's own auto-generated logo (795 companies, meta `source: auto_generated`). Ignore; don't write. |
+Display gate: `show_logo_on_website = yes` + `website_programs` (Code set these on 64 companies) + new
+**`business.website_collectives`** `F08jnrL6smMd8HRQITF5` (lean_startup / mainstreet / manufacturing, created empty;
+Wix Clients had no collective data).
+- Migrated: Wix `Clients` = 138 rows (95 with an image, every one a 2000×2000 canvas, white/mono for dark
+  backgrounds). 90 image rows → **83 unique companies** (domain → name → 13 hand-confirmed fuzzy), each now holds an
+  800×800 PNG in `website_logo_url`, uploaded + read back. All 64 `show=yes` companies have a logo. Script:
+  `scripts-ts/client-logos-migrate.ts` (idempotent), mapping `reports/client-logos-wix-to-ghl-mapping.json`,
+  ledger `reports/client-logos-ledger.json`.
+- **Merged 2026-10-22:** "Ubivis" → **Ubivis USA INC** `692619a5…` and "Kopplin Co" → **Kopplin Co.** `6952d938…`
+  (older, richer record kept; website fields copied fill-empty; 3 contacts + 1 activity re-pointed; losers deleted;
+  log in `docs/audits/2026-10-13-domain-switch/merges-applied-2026-10-22-ubivis-kopplin.json`). Ubivis contacts use
+  both ubivis.ai and ubivis.io; Paulo Souza exists twice (one per domain).
+- **GreenMark Biomedical's Wix row held the Homestream logo** (same Wix image id). URL cleared, mapping row excluded.
+  Zach's call 10-22: the 18 are now `show=yes` (16 ManuTech, Summit Cleaning + Yoder Signs LOCAL). **81 companies show a logo.**
+- Not matched (no GHL company): 3D Foundri, Capriol, Cryocellar (maybe "Cryo Cure"?), Hero by Design, Worthy Occasions.
+- **Waiting on Zach:** 20 companies were on the Wix grid but are NOT `show=yes` (logo now stored, hidden): GreenMark
+  Biomedical, imi, Lilypad Labs, Bearex, Adaxius, Elm Park Labs, Deepview, Yoder Signs, Bubblehands, DragonFly Refresh,
+  LightSpeed Concepts, GEKOT Robotics, Khenda, APT Solar, Hawkins Suspension, Summit Cleaning, Kiuey, D2 Savings,
+  InterJad, Ubivis USA INC. Duplicate companies: "Ubivis" (shown, logo copied) vs "Ubivis USA INC"; two "Kopplin Co".
+- ⚠️ Option key drift: `business.website_programs` has `exit_readiness`; Profiles/Resources `programs` have
+  `exit_readiness_accelerator`. No company holds either yet. The directory slug table must map both (or align them).
+
+## ✅ 2026-10-23 — Resources MERGED INTO PROFILES (data live + verified; code NOT deployed)
+
+Spec: `docs/sprints/profiles-resources-merge.md`. Zach: one directory object before the new site launches.
+- **Profiles** now hold people (`profile_type=person`, 47) AND resources (`profile_type=resource`, 94). Folders:
+  Profile Info / Person Details / Resource Details / [AI] Readiness Tags / Page Ranking / [SYNC] System.
+  ⚠️ API can't move existing fields between folders (422 `parentId`); done in the UI (bulk *Move to folder*).
+- New associations: `profile_company` `6adb83db4d273170ee7dd243`, `referral_referred_to_profile` `6adb83dd63ba7fdb95573cbb`,
+  `milestone_profile` `6adb83dd3781cf9ae0873369` (none swapped). 27 company + 5 contact + 1 referral + 3 milestone
+  relations carried; 17 new exact company links; 50 resources have no company in the CRM (never created).
+- 94/94 verified by read-back; re-run = 94 noop; taggers dry-run 0 writes; stops reconcile 0 drift.
+- **Resources object = frozen archive** ("Resources (Archived)"). **Wix frozen**: old resource-tagger row and the
+  "Resources → Wix Resources" set disabled in Postgres; nightly Wix step removed.
+- Code: resource-tagger → Profiles; new `/api/profile-sync` + `lib/profiles/pipeline.ts`; `/api/resource-sync` retired;
+  referral picker + referral links → profiles. 810/810 tests.
+- ⬜ **Zach:** deploy · create "Profile Changed" workflow → `/api/profile-sync` · turn OFF "Resource Changed" ·
+  rebuild "Become a Resource" form on Profiles · hide the archived object · link the 50 unlinked by hand.
+  Until the deploy, the LIVE app still runs the old resource-sync; it is harmless now (tagger row + Wix set disabled).
+
+## ✅ 2026-10-22 — Profile roster fixed, Exit Readiness Accelerator added, Profiles + Resources tagged incl. MSRL
+
+- **Roster:** deleted the duplicate "Zach Kraabel (duplicate, delete)" record (the real one `6ad81fdb…` was
+  always there); Aiden Brunin's profile (created outside code) is now linked to contact `c6iIXIMskZH1kM8ffd1H`
+  and his media-library headshot copied into the `headshot` file field; Sierra already Hidden.
+  **New:** Steve Tebbetts `6ada92448bf806f5cc30e041` (EIR, ManuTech, contact `mrtcFtykUE9nuWRvCVMN`, no headshot
+  yet) and Jeff Matzen `6ada92a6a1ecd6bdabb358fc` (EIR, contact `tfNP4koslwPhifsnZADO` = jeff@freshwater.ventures;
+  a 2nd Jeff contact `qnjjgIZFhxB5It89aJag` jeff@matzens.com exists, merge candidate). Both bios written from
+  their LinkedIn PDFs, both Published.
+- **Program option `exit_readiness_accelerator` ("Exit Readiness Accelerator")** added to `programs` on BOTH
+  Profiles and Resources (read-back proved no option lost). Jeff is tagged to it and nothing else, and his
+  service area is hand-set to M&A / Exit Planning only (stops derived from that).
+- **Readiness tagging incl. MSRL:** new `lib/enrichment/enrichers/profileTagger.ts` (record enricher, same prompt
+  as the contact tagger, converts tags to the profiles option KEYS) + `scripts-ts/profiles-tag-run.ts` + config
+  default `profile-tagger::custom_objects.profiles` (Published/Approved AND Team/EIR). Applied to 39 profiles
+  (34 on the MSRL line). Resources re-tagged with the MSRL-aware resource tagger (93 in scope).
+- 🔴 **The DEPLOYED app reverts resource tags.** Every resource update fires the resource-sync webhook, whose
+  pipeline runs the OLD (pre-MSRL) resource tagger because the live config gated on Approved **and Published**,
+  so it re-classified each record seconds after our write (Comerica: "Small Business Lending" →
+  "Capital Equipment & Financing", lastUpdatedBy INTEGRATION). **Mitigation applied:** `enricher_configs`
+  resource-tagger gate narrowed to `Approved` only (was Approved+Published), then resources re-tagged after the
+  10-min config cache expired. ⚠️ **Restore Published to that gate only after the MSRL code is deployed.**
+- 🟡 **A line that becomes EMPTY on re-tag is never cleared** (the object write path drops empty values), so old
+  stops linger. New `scripts-ts/readiness-stops-reconcile.ts` sends explicit `remove` modifiers; run it after
+  any re-tag. Proper fix belongs in the write layer (clear = `{remove: current}` for MULTIPLE_OPTIONS).
+- ⚠️ MSRL `STOP_SERVICES` is still the 10-21 first draft awaiting Brandon's review; changing it later is a
+  no-LLM re-derive. The MSRL rubric in code is **Draft v2 (Oct 2026)**.
+- Still open: Joe Marr's pending duplicate profile on contact `fczWJx4PzBIMIw3BicRy`; headshots for Steve and Jeff;
+  the `headshot_url` TEXT field someone added to Profiles (only Aiden uses it) — keep one image field, not two.
+
+## ✅ 2026-10-20 — Profiles object LIVE: website profiles moved off contacts (Team / EIR / Board)
+
+Spec: `docs/sprints/profiles-object.md`. **Object `custom_objects.profiles`** (id `6ad81f635c14929d96d8a391`,
+key permanent) with 29 fields in folders "Profile Info" `deIpWxPiyDP7ug9uQgwv` + "Page Ranking"
+`Yo0DNfBKHOjxx92IsmGM`. **Association `profile_contact`** id `6ad81f751f3a6ce0ea97740a`, read back:
+first = contact, second = profile (NOT swapped). Programs/collectives use the **same option keys as
+Resources**; `service_areas` is a real multi-select (29 snake keys, `serviceKey()` in `profiles-setup.ts`).
+- **Migrated 44/44** contacts with Website Profile Status (43 published, 1 pending: Joe Marr's duplicate
+  contact `fczWJx4PzBIMIw3BicRy`). Independent verify: 0 field mismatches, **83/83 files** rehosted into the
+  profile file fields (public GET 200), **44/44 relations**. Re-run = 44 noop (caller-side scalar diff).
+  `rank_local` seeded from Wix Team `localDisplayRanking` (26 rows; 100 = unranked → blank).
+- Scripts: `scripts-ts/profiles-setup.ts` (audit / `--apply`), `profiles-migrate.ts` (dry run / `--apply` /
+  `--only=`), ledger `reports/profiles-migration-ledger.json`. ⚠️ Run with **tsx**, not vite-node, from the
+  desktop VM (darwin rollup binary in node_modules): `~/tools/node_modules/.bin/tsx`.
+- **Contacts untouched.** Nothing reads Profiles yet. Next, in order: (1) Become-an-Expert intake upserts
+  the profile (contact → profile, one direction); (2) re-point readiness tagger + Wix Team sync to profiles;
+  (3) AI Studio directory proxy reads Profiles + Resources only; (4) rank fields on Resources + the
+  drag-and-drop ranking page; (5) retire contact website fields. **Until (1) lands, profile edits made on the
+  contact do not flow to the profile — re-run `profiles-migrate.ts --apply` (idempotent) after edits.**
+- ⬜ **CLEANUP OWED (Zach, 2026-10-21): delete the profile folder + custom fields from the CONTACT record** now that
+  Profiles hosts this content. Folder "Form | WIX Team CMS Profile" `8rSDnE9E7nehea0Xsn0F` and its fields:
+  `contact.status` `uhMXVvv2sWa15VUwnxdi`, `website_team_tags` `TCCMGrG6Pv9Lfhga0Fi0`, `programs` `58YNmbkHWahxdwn9yb9f`,
+  `collectives` `lW17fW7GSnbfvugy7CLR`, `biowho_you_are` `5DsGtcbAWOR2cNLYFQf2`, `linkedin` `YSS7z08zleBB2Hy1J5VD`,
+  `headshot` `fb3uZjhMTAGK80wEC61t`, `service_areas` `4cwXyHXVmKae5hWrZLCT`, `mrl_stops` `uDrHbARvMAQttKxnKiCl`,
+  `trl_stops` `jmZaR2m6t64l6XeWHgHA`, `crl_stops` `UhG8N7Nq5HN5AMtySbq4`, `investor_readiness_stops` `RTxPQGQbqX5dIlMaRTpf`,
+  `readiness_confidence` `qMbeXSZpCmPbjKSqopug`, `readiness_rationale` `ttiZVLC0mVBp7rZLAUH2`, `wix_team_row_id` `mnSsC0uCxSScciUHNtGI`.
+  Also review (outside the folder, may have other uses): `company_logo` `3yf1JeXP7GCWkonJ3KAi`, `job_title`
+  `sLbLkuB3uO7cW5Egkpti` (General Info, 211 contacts, KEEP), website `QhfW9YQYKRXb9MJaVA8s`, plus the already-dead
+  duplicates `your_title` `RQxiEBzvb6duX29eFPfo` and `logo_file` `J8nInII6LPqJTFL1pGA0`.
+  **Do NOT delete until these stop reading them:** `readinessTagger.ts` (re-point to Profiles), the Wix Team sync
+  Contact → Team mapping set (re-point or switch off), the old Become-an-Expert form `2VJrENRVVzj5PuUhH6y0` (replace with
+  the Profile form), and test scripts `verify-expert-e2e.ts` / `reset-expert-for-test.ts`. Re-run the 44-record verify
+  first so nothing on a contact is newer than its Profile. Deleting a field deletes its values, no undo.
+- Open for Zach: what page Wix `localDisplayRanking1` ranked (differs on 4 rows); Wix-only Team row
+  "Aiden Brunin" has no GHL contact and was not migrated; GHL contact-merge test on a throwaway pair.
+
 ## 🆕 2026-10-20 — Form + booking conversions server-side (GA4 · LinkedIn · Meta): BUILT, in shadow mode
 
 **Spec: `docs/sprints/form-booking-conversions.md`** — go-live checklist at the bottom, in order.
