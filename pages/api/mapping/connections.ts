@@ -1,14 +1,13 @@
 // pages/api/mapping/connections.ts — unified list of all mapping connections for the hub,
 // plus create (POST) for a new GHL↔GHL connection.
 //
-// GET merges every GHL↔GHL sync (the syncs table) + every GHL→Wix set into one card shape.
+// GET lists every GHL↔GHL sync (the syncs table) as one card shape. (Wix sets removed 2026-10-30.)
 // POST creates a new GHL↔GHL connection (a syncs row with its object pair + associationId).
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { hasDatabase } from '@/lib/db';
 import { isAdmin } from '@/lib/auth/admin';
 import { getDbStore } from '@/lib/mapping/store';
-import { getWixStore } from '@/lib/mapping/wixStore';
 
 export interface ConnectionCard {
   id: string;
@@ -69,23 +68,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
     } catch { /* no syncs yet */ }
-
-    // GHL→Wix sets.
-    try {
-      for (const s of await getWixStore().listSets()) {
-        connections.push({
-          id: s.id,
-          name: s.name,
-          source: { tool: 'ghl', object: s.sourceObject },
-          target: { tool: 'wix', object: s.wixCollectionId },
-          oneWay: true,
-          fieldCount: s.rowCount,
-          activeCount: s.rowCount,
-          enabled: s.enabled,
-          updatedAt: s.updatedAt,
-        });
-      }
-    } catch { /* Wix store unavailable */ }
 
     res.status(200).json({ connections });
   } catch (error: any) {

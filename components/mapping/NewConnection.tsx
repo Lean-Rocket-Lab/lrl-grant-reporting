@@ -3,7 +3,7 @@
 // The destination is ASSOCIATION-DRIVEN: once you pick a GHL source object, the destination
 // list only enables GHL objects that share an association with it (unrelated objects show as
 // disabled "no association"), and when several associations connect the same pair you pick
-// which one. Wix collections are always offered as one-way destinations.
+// which one.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
@@ -19,9 +19,8 @@ const primaryBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'c
 export default function NewConnection() {
   const router = useRouter();
   const [defs, setDefs] = useState<AssocDef[]>([]);
-  const [collections, setCollections] = useState<{ id: string; displayName: string }[]>([]);
   const [source, setSource] = useState('contact');
-  const [dest, setDest] = useState(''); // encoded: "ghl:<obj>:<assocId>" | "wix:<collectionId>"
+  const [dest, setDest] = useState(''); // encoded: "ghl|<obj>|<assocId or scalar:on:field>"
   const [name, setName] = useState('');
   const [adminSecret, setAdminSecret] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,7 +30,6 @@ export default function NewConnection() {
   useEffect(() => {
     (async () => {
       try { const r = await fetch('/api/mapping/associations'); if (r.ok) setDefs((await r.json()).associations ?? []); } catch { /* ignore */ }
-      try { const w = await fetch('/api/wix/collections'); if (w.ok) setCollections((await w.json()).collections ?? []); } catch { /* ignore */ }
     })();
   }, []);
 
@@ -74,13 +72,6 @@ export default function NewConnection() {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? 'create failed');
         router.push(`/mappings/${d.connection.slug}`);
-      } else if (dest.startsWith('wix|')) {
-        const collectionId = dest.slice(4);
-        const nm = name || `${labelOf(source)} → ${collectionId}`;
-        const r = await fetch('/api/wix/sets', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret }, body: JSON.stringify({ name: nm, sourceObject: 'contact', wixCollectionId: collectionId, matchSourceField: 'id', matchTargetColumn: 'ghlContactId', policy: 'overwrite', enabled: true, rows: [] }) });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error ?? 'create failed');
-        router.push(`/mappings/${d.set.id}`);
       }
     } catch (e: any) { setErr(e?.message ?? 'create failed'); } finally { setBusy(false); }
   }
@@ -90,7 +81,7 @@ export default function NewConnection() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 18 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: 'var(--brand)' }}>New connection</span>
         <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26, letterSpacing: '-.02em', margin: 0, color: 'var(--text)' }}>Create a mapping</h1>
-        <p style={{ margin: 0, fontSize: 14, color: 'var(--gray-500)' }}>Pick a source object; the destination lists only objects it can sync with (via a GHL association) plus your Wix collections.</p>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--gray-500)' }}>Pick a source object; the destination lists only objects it can sync with (via a GHL association or a linking field).</p>
       </div>
 
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-sm)', padding: 20, maxWidth: 720 }}>
@@ -125,11 +116,6 @@ export default function NewConnection() {
                   ];
                 })}
               </optgroup>
-              {collections.length > 0 && (
-                <optgroup label="Wix CMS (one-way)">
-                  {collections.map((c) => <option key={c.id} value={`wix|${c.id}`}>{c.displayName}</option>)}
-                </optgroup>
-              )}
             </select>
           </label>
         </div>

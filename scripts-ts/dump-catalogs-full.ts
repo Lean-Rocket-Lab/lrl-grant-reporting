@@ -22,11 +22,11 @@ function loadEnvLocal() {
 async function main() {
   loadEnvLocal();
   process.env.GHL_TARGET = 'live';
-  const [contact, business, activities, resources] = await Promise.all([
+  const [contact, business, activities, profiles] = await Promise.all([
     getContactFieldCatalog(),
     getBusinessFieldCatalog(),
     getObjectKeyFieldCatalog('custom_objects.activities'),
-    getObjectKeyFieldCatalog('custom_objects.resources'),
+    getObjectKeyFieldCatalog('custom_objects.profiles'),
   ]);
   const slim = (c: any) => ({
     count: c.fields.length,
@@ -44,7 +44,7 @@ async function main() {
     contact: slim(contact),
     business: slim(business),
     activities: slim(activities),
-    resources: slim(resources),
+    profiles: slim(profiles),
   };
   mkdirSync(join(process.cwd(), 'reports'), { recursive: true });
   writeFileSync(join(process.cwd(), 'reports/catalog-dump-full.json'), JSON.stringify(out, null, 2));

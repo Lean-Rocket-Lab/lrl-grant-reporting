@@ -1,15 +1,11 @@
 // pages/mappings/[id].tsx — the connection editor. Dispatches by id:
 //   'new'                     → NewConnection chooser (association-driven)
-//   <uuid>                    → GHL→Wix editor (a Wix set)
 //   any other slug            → GHL↔GHL editor (contact-company or a created pair)
 
 import { useRouter } from 'next/router';
 import Shell from '@/components/shell/Shell';
 import GhlConnectionEditor from '@/components/mapping/GhlConnectionEditor';
-import WixConnectionEditor from '@/components/mapping/WixConnectionEditor';
 import NewConnection from '@/components/mapping/NewConnection';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function ConnectionDetail() {
   const router = useRouter();
@@ -17,7 +13,6 @@ export default function ConnectionDetail() {
 
   let body: React.ReactNode = <div style={{ fontSize: 14, color: 'var(--gray-500)' }}>Loading…</div>;
   if (id === 'new') body = <NewConnection />;
-  else if (UUID.test(id)) body = <WixConnectionEditor id={id} />;
   else if (id) body = <GhlConnectionEditor slug={id} />;
 
   return (

@@ -1,7 +1,7 @@
 // components/mapping/ToolObjectBand.tsx — the source/destination tool+object selector band
 // above the field table. Each side shows a tinted tool chip + object; the center shows the
-// derived sync direction (two-way ⇄, or one-way → with a lock for Wix). A side is a grouped
-// picker (GHL objects + Wix collections) when an onChange is passed, else a static chip.
+// derived sync direction (two-way ⇄, or one-way → with a lock). A side is a grouped
+// picker (GHL objects) when an onChange is passed, else a static chip.
 
 import { useEffect, useRef, useState } from 'react';
 import { TOOLS, objectIcon, objectLabel, pairingIsOneWay, type ToolDef } from '@/lib/mapping/tools';
@@ -13,15 +13,13 @@ function chipColors(toolId: string): { tint: string; fg: string } {
   return { tint: t?.tint ?? 'var(--gray-100)', fg: t?.fg ?? 'var(--gray-500)' };
 }
 
-function Chip({ side, wixCollections }: { side: SideRef; wixCollections: { id: string; displayName: string }[] }) {
+function Chip({ side }: { side: SideRef }) {
   const c = chipColors(side.tool);
-  const label = side.tool === 'wix'
-    ? (wixCollections.find((w) => w.id === side.object)?.displayName ?? (side.object || 'Choose collection'))
-    : objectLabel(side.tool, side.object);
+  const label = objectLabel(side.tool, side.object);
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
       <span style={{ width: 40, height: 40, borderRadius: 10, background: c.tint, color: c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flex: 'none' }}>
-        <i className={`fa-solid ${side.tool === 'wix' ? 'fa-table-cells-large' : objectIcon(side.tool, side.object)}`} />
+        <i className={`fa-solid ${objectIcon(side.tool, side.object)}`} />
       </span>
       <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, minWidth: 0 }}>
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: c.fg }}>{TOOLS[side.tool]?.label ?? side.tool}</span>
@@ -31,7 +29,7 @@ function Chip({ side, wixCollections }: { side: SideRef; wixCollections: { id: s
   );
 }
 
-function Picker({ side, onChange, wixCollections }: { side: SideRef; onChange: (s: SideRef) => void; wixCollections: { id: string; displayName: string }[] }) {
+function Picker({ side, onChange }: { side: SideRef; onChange: (s: SideRef) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -46,19 +44,18 @@ function Picker({ side, onChange, wixCollections }: { side: SideRef; onChange: (
     <div ref={ref} style={{ position: 'relative' }}>
       <button type="button" className="lrl-focus" onClick={() => setOpen((o) => !o)}
         style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 10, padding: '8px 12px', cursor: 'pointer' }}>
-        <Chip side={side} wixCollections={wixCollections} />
+        <Chip side={side} />
         <i className="fa-solid fa-chevron-down" style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--gray-400)' }} />
       </button>
       {open && (
         <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, minWidth: 260, zIndex: 900, background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 10, boxShadow: 'var(--shadow-md, 0 12px 32px rgba(0,0,0,.16))', overflow: 'hidden', maxHeight: 360, overflowY: 'auto' }}>
-          {[ghl, TOOLS.wix].map((tool: ToolDef) => {
-            const objs = tool.id === 'wix' ? wixCollections.map((w) => ({ id: w.id, label: w.displayName, icon: 'fa-table-cells-large' })) : tool.objects;
+          {[ghl].map((tool: ToolDef) => {
+            const objs = tool.objects;
             return (
               <div key={tool.id}>
                 <div style={{ padding: '8px 14px 4px', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: tool.fg, display: 'flex', alignItems: 'center', gap: 7 }}>
                   <i className={`fa-solid ${tool.icon}`} /> {tool.label} <span style={{ color: 'var(--gray-400)', fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>· {tool.sync === 'two-way' ? 'two-way' : 'one-way target'}</span>
                 </div>
-                {objs.length === 0 && <div style={{ padding: '6px 14px 10px', fontSize: 12, color: 'var(--gray-450)' }}>No collections (connect Wix).</div>}
                 {objs.map((o) => {
                   const active = side.tool === tool.id && side.object === o.id;
                   return (
@@ -82,11 +79,10 @@ function Picker({ side, onChange, wixCollections }: { side: SideRef; onChange: (
 }
 
 export default function ToolObjectBand({
-  source, target, wixCollections = [], onChangeSource, onChangeTarget,
+  source, target, onChangeSource, onChangeTarget,
 }: {
   source: SideRef;
   target: SideRef;
-  wixCollections?: { id: string; displayName: string }[];
   onChangeSource?: (s: SideRef) => void;
   onChangeTarget?: (s: SideRef) => void;
 }) {
@@ -95,7 +91,7 @@ export default function ToolObjectBand({
     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 18, alignItems: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: 'var(--shadow-sm)', padding: '16px 20px', marginBottom: 16 }}>
       <div>
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 9.5, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--gray-450)', marginBottom: 6 }}>Source</div>
-        {onChangeSource ? <Picker side={source} onChange={onChangeSource} wixCollections={wixCollections} /> : <Chip side={source} wixCollections={wixCollections} />}
+        {onChangeSource ? <Picker side={source} onChange={onChangeSource} /> : <Chip side={source} />}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '0 6px' }}>
@@ -110,7 +106,7 @@ export default function ToolObjectBand({
 
       <div>
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 9.5, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--gray-450)', marginBottom: 6, textAlign: 'right' }}>Destination</div>
-        {onChangeTarget ? <Picker side={target} onChange={onChangeTarget} wixCollections={wixCollections} /> : <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Chip side={target} wixCollections={wixCollections} /></div>}
+        {onChangeTarget ? <Picker side={target} onChange={onChangeTarget} /> : <div style={{ display: 'flex', justifyContent: 'flex-end' }}><Chip side={target} /></div>}
       </div>
     </div>
   );

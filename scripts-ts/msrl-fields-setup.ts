@@ -147,12 +147,10 @@ async function main() {
   await ensureObjectFields('custom_objects.business_stage', 'churchill_score', STAGE_FIELDS, MSRL_FOLDER);
   // 2. Company: intake inputs + current scores
   await ensureObjectFields('business', 'churchill_current', [...INTAKE_FIELDS, ...COMPANY_SCORE_FIELDS], MSRL_FOLDER);
-  // 3. Profiles + Resources: MSRL stop line, and the 6 Main Street service options
+  // 3. Profiles (Resources object deleted 2026-10-30): MSRL stop line, and the 6 Main Street service options
   await ensureObjectFields('custom_objects.profiles', 'mrl_stops', [STOPS]);
-  await ensureObjectFields('custom_objects.resources', 'mrl_stops', [STOPS]);
   console.log('── service_areas option lists ──');
   await appendObjectOptions('custom_objects.profiles', 'service_areas', NEW_SERVICE_LABELS);
-  await appendObjectOptions('custom_objects.resources', 'service_areas', NEW_SERVICE_LABELS);
 
   // 4. Contact: the form's fields (GHL forms are contact-scoped) + the tagger's msrl_stops
   console.log('\n── contact (location-model; GHL derives the key from the name) ──');

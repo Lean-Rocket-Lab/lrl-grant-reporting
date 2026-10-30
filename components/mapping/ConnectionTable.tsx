@@ -1,8 +1,8 @@
 // components/mapping/ConnectionTable.tsx — the shared field-mapping table for any connection.
 //
 // Generalized from MappingTable so one table serves both GHL↔GHL (two-way, per-row direction)
-// and GHL→Wix (one-way, locked "→ Push 🔒", with a per-row transform). Source/destination use
-// the shared SearchableFieldSelect; the destination is tool-tinted (teal for GHL, violet Wix).
+// and one-way rows (locked "→ Push 🔒", with a per-row transform). Source/destination use
+// the shared SearchableFieldSelect; the destination is tool-tinted.
 
 import { useMemo } from 'react';
 import SearchableFieldSelect, { type CatalogFieldOpt } from './SearchableFieldSelect';

@@ -84,18 +84,7 @@ const ANY_PREFIX = /^\[(AI|SYNC)\]\s*/;
   }
   if (!propagationRead) console.log('(⚠️ score-propagation targets unread — see note above)');
 
-  // [SYNC] — the Wix row-id write-back pointers, read from each mapping set's own writebackField.
-  try {
-    const { getWixStore } = await import('../lib/mapping/wixStore');
-    const store = getWixStore();
-    const summaries = await store.listSets();
-    for (const sm of summaries) {
-      const set = await store.getSet(sm.id);
-      if (set?.writebackField) sources.push({ key: set.writebackField, writer: `wix-writeback:${set.name}`, prefix: SYNC_PREFIX });
-    }
-  } catch (e: any) {
-    console.log(`(⚠️ could not read Wix mapping sets — write-back fields may be MISSING: ${e?.message ?? e})`);
-  }
+  // (The [SYNC] Wix row-id write-back pointers were removed with Wix, 2026-10-30.)
 
   // Resolve against the live catalogs.
   const { getCatalog } = await import('../lib/ghl/catalogCache');

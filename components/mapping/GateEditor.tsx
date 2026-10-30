@@ -12,7 +12,8 @@
 
 import { useMemo, useState } from 'react';
 import SearchableFieldSelect, { type CatalogFieldOpt } from './SearchableFieldSelect';
-import type { GateAction } from '@/lib/mapping/wixTypes';
+/** Per-value action (originally for the retired Wix sync; kept for the 'action' render mode). */
+export type GateAction = 'upsert' | 'update' | 'hide' | 'skip';
 
 export interface GateFieldOpt extends CatalogFieldOpt {
   options?: { key?: string; label: string }[] | null;

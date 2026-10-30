@@ -36,16 +36,7 @@ if (!process.env.GHL_TARGET) process.env.GHL_TARGET = 'live';
     }
   }
 
-  console.log('\n══ 2. WIX PUSH GATES — a status flip is meant to publish or unpublish ══');
-  const { getDb, hasDatabase } = await import('../lib/db');
-  if (hasDatabase) {
-    const { wixMappingSets } = await import('../lib/db/schema');
-    const sets: any[] = await getDb().select().from(wixMappingSets);
-    for (const s of sets) {
-      const gate = s.gate ?? s.gateField ?? null;
-      console.log(`   ${String(s.slug ?? s.name).padEnd(26)} enabled=${s.enabled !== false}  gate=${JSON.stringify(gate)}`);
-    }
-  } else console.log('   (no DATABASE_URL)');
+  console.log('\n══ 2. WIX PUSH GATES — removed 2026-10-30 (Wix retired) ══');
 
   console.log('\n══ 3. THE LINK ITSELF — businessId ══');
   console.log('   Not a custom field, but it is what makes a contact scoreable at all: the scorer');

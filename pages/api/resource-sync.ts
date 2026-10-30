@@ -6,8 +6,8 @@
 // middleware's self-enforcing allowlist, so an anonymous GHL call is refused by the login gate before
 // it gets here; a signed-in caller gets 410. Turn the GHL "Resource Changed" workflow off.
 //
-// The pre-merge implementation (enrich + company link + Wix Resources sync) is in git history and in
-// lib/wix-sync/pipeline.ts (runResourcePipeline), which nothing calls any more.
+// The pre-merge implementation (enrich + company link + Wix Resources sync) is in git history.
+// (The archived custom_objects.resources object itself was deleted 2026-10-30.)
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 

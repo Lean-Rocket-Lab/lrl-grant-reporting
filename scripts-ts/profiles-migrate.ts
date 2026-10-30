@@ -15,7 +15,6 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { WIX_RETIRED } from '../lib/wix/config';
 
 function loadEnvLocal() {
   try {
@@ -67,21 +66,8 @@ const arr = (v: unknown): string[] =>
   v == null || v === '' ? [] : Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : [String(v).trim()];
 
 async function wixLocalRanks(): Promise<Record<string, number>> {
-  // Wix Team `localDisplayRanking` (100 = unranked) keyed by ghlContactId. Wix-only seed for rank_local.
-  const out: Record<string, number> = {};
-  if (!process.env.WIX_API_TOKEN || WIX_RETIRED) return out;
-  const r = await fetch('https://www.wixapis.com/wix-data/v2/items/query', {
-    method: 'POST',
-    headers: { Authorization: process.env.WIX_API_TOKEN!, 'wix-site-id': process.env.WIX_SITE_ID!, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dataCollectionId: 'Team', query: { paging: { limit: 100 } } }),
-  });
-  const j: any = await r.json();
-  for (const it of j.dataItems ?? []) {
-    const d = it.data ?? {};
-    const n = Number(d.localDisplayRanking);
-    if (d.ghlContactId && Number.isFinite(n) && n > 0 && n < 100) out[d.ghlContactId] = n;
-  }
-  return out;
+  // Wix was the one-time seed for rank_local; Wix is gone (2026-10-30), so there is nothing to read.
+  return {};
 }
 
 async function main() {

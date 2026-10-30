@@ -2,7 +2,7 @@
 //
 // Each tool declares its sync capability and its selectable objects. The mapping UI derives
 // the allowed direction from the pairing: a mapping that touches a 'one-way-target' tool
-// (e.g. Wix CMS) is locked to push (GHL → that tool); only GHL↔GHL is per-row two-way.
+// (none today — Wix was removed 2026-10-30) is locked to push (GHL → that tool); only GHL↔GHL is per-row two-way.
 // Adding a future tool = one entry here, no UI changes.
 
 export type SyncCapability = 'two-way' | 'one-way-target';
@@ -14,14 +14,14 @@ export interface ToolObject {
 }
 
 export interface ToolDef {
-  id: string; // 'ghl' | 'wix'
+  id: string; // 'ghl'
   label: string; // 'GoHighLevel'
   short: string; // 'GHL'
   icon: string; // group glyph
   tint: string; // chip background token
   fg: string; // chip foreground token
   sync: SyncCapability;
-  /** Static objects for the tool (Wix objects are its CMS collections, loaded at runtime). */
+  /** Static objects for the tool. */
   objects: ToolObject[];
 }
 
@@ -39,17 +39,6 @@ export const TOOLS: Record<string, ToolDef> = {
       { id: 'business', label: 'Company', icon: 'fa-building' },
       { id: 'opportunity', label: 'Opportunity', icon: 'fa-handshake' },
     ],
-  },
-  wix: {
-    id: 'wix',
-    label: 'Wix CMS',
-    short: 'Wix',
-    icon: 'fa-globe',
-    tint: 'var(--violet-100)',
-    fg: 'var(--violet-700)',
-    sync: 'one-way-target',
-    // objects (CMS collections) are loaded at runtime from /api/wix/collections.
-    objects: [],
   },
 };
 
@@ -86,5 +75,5 @@ export function objectLabel(toolId: string, objectId: string): string {
 }
 
 export function objectIcon(toolId: string, objectId: string): string {
-  return TOOLS[toolId]?.objects.find((o) => o.id === objectId)?.icon ?? (toolId === 'wix' ? 'fa-table-cells-large' : 'fa-cube');
+  return TOOLS[toolId]?.objects.find((o) => o.id === objectId)?.icon ?? 'fa-cube';
 }

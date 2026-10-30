@@ -6,7 +6,6 @@
 // engine already consumes — nothing in lib/sync/* changes.
 
 import { pgTable, uuid, text, integer, real, boolean, jsonb, timestamp, unique, index, primaryKey } from 'drizzle-orm/pg-core';
-import type { WixCreatePolicy, WixGate, WixSecondaryMatch, WixVisibility } from '../mapping/wixTypes';
 import type { EnricherFilter, EnricherGroup, EnricherMembership, EnricherStatusGate, FilterCombine } from '../enrichment/configTypes';
 import type { ChangeLogFieldChange } from '../audit/types';
 
@@ -62,75 +61,7 @@ export type SyncRow = typeof syncs.$inferSelect;
 export type FieldMappingRow = typeof fieldMappings.$inferSelect;
 export type NewFieldMappingRow = typeof fieldMappings.$inferInsert;
 
-// ---------------------------------------------------------------------------
-// GHL -> Wix CMS sync (additive; independent of the syncs/field_mappings above).
-//
-// Each `wix_mapping_sets` row is one outbound sync: a GHL source object mapped to
-// exactly ONE Wix CMS collection, upserted by a match key. `wix_mapping_rows` holds
-// the per-field mappings. Kept separate from the contact<->company tables because the
-// target side is a Wix collection (site + collection + column), not a GHL object.
-// ---------------------------------------------------------------------------
-
-export const wixMappingSets = pgTable('wix_mapping_sets', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  name: text('name').notNull(),
-  /** Source system — 'ghl' for now (room for future sources). */
-  sourceSystem: text('source_system').notNull().default('ghl'),
-  /** GHL source object key: 'contact' | 'business' | 'custom_objects.<key>'. */
-  sourceObject: text('source_object').notNull().default('contact'),
-  /** Wix target: the site + the single collection this set writes to. */
-  wixSiteId: text('wix_site_id').notNull(),
-  wixCollectionId: text('wix_collection_id').notNull(),
-  /** Upsert key: a source field ("id") matched to a Wix column ("ghlContactId"). */
-  matchSourceField: text('match_source_field').notNull(),
-  matchTargetColumn: text('match_target_column').notNull(),
-  /** Set-level apply policy default: 'overwrite' | 'fill-empty'. Rows may override. */
-  policy: text('policy').notNull().default('overwrite'),
-  /** Create-when-missing vs update-only. */
-  createPolicy: text('create_policy').notNull().default('find_or_create').$type<WixCreatePolicy>(),
-  /** Status→action gate on the source record (JSON). NULL => always upsert. */
-  gate: jsonb('gate').$type<WixGate>(),
-  /** First-link dedup keys tried when the hard match key misses (JSON array). */
-  secondaryMatch: jsonb('secondary_match').$type<WixSecondaryMatch[]>(),
-  /** GHL field to write the created/linked target row id back to. */
-  writebackField: text('writeback_field'),
-  /** Engine-controlled visibility column on the target collection (JSON). */
-  visibility: jsonb('visibility').$type<WixVisibility>(),
-  enabled: boolean('enabled').notNull().default(true),
-  version: integer('version').notNull().default(1),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const wixMappingRows = pgTable(
-  'wix_mapping_rows',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    setId: uuid('set_id')
-      .notNull()
-      .references(() => wixMappingSets.id, { onDelete: 'cascade' }),
-    /** GHL field key/id on the source object ("contact.bio" or a scalar like "email"). */
-    sourceFieldKey: text('source_field_key').notNull(),
-    /** Existing Wix column key on the chosen collection ("bio", "image_fld"). */
-    targetColumnKey: text('target_column_key').notNull(),
-    /** Optional value transform (e.g. 'html', 'imageFromUpload', 'referenceFromOptions'). */
-    transform: text('transform'),
-    /** Per-row policy override: 'overwrite' | 'fill-empty'. NULL => use the set default. */
-    policy: text('policy'),
-    /** Per-row GHL-label → Wix-value rewrites for labels that are a different name on each side. */
-    valueMap: jsonb('value_map').$type<Record<string, string>>(),
-    sortOrder: integer('sort_order').notNull().default(0),
-  },
-  (t) => ({
-    bySet: index('wix_mapping_rows_set_idx').on(t.setId, t.sortOrder),
-    // One mapping per destination column within a set (upsert target).
-    uniqTarget: unique('wix_mapping_rows_set_target_uq').on(t.setId, t.targetColumnKey),
-  }),
-);
-
-export type WixMappingSetRow = typeof wixMappingSets.$inferSelect;
-export type NewWixMappingSetRow = typeof wixMappingSets.$inferInsert;
-export type WixMappingRowRow = typeof wixMappingRows.$inferSelect;
-export type NewWixMappingRowRow = typeof wixMappingRows.$inferInsert;
+// (The GHL -> Wix CMS tables wix_mapping_sets / wix_mapping_rows were dropped 2026-10-30.)
 
 // ---------------------------------------------------------------------------
 // Enricher gate config (additive). One row per (enricher, sourceObject): the WHEN/WHERE an
