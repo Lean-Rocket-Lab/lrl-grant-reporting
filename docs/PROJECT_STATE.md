@@ -181,6 +181,29 @@
 
 ---
 
+## ✅ 2026-10-30 — Wix-era GHL fields DELETED + contact readiness-tagger retired (`10b20a7`, deployed)
+
+- **Deleted (API, read back gone):** contact folder "WIX Team CMS Profile" `8rSDnE9E7nehea0Xsn0F` and all 15 fields
+  (`status` Website Profile Status, `website_team_tags`, `programs`, `collectives`, `biowho_you_are`, `linkedin`, `headshot`,
+  `service_areas`, `mrl/trl/crl/investor_readiness_stops`, `readiness_confidence`, `readiness_rationale`, `wix_team_row_id`);
+  Profiles `wix_team_row_id` / `wix_resource_row_id` / `wix_funder_row_id`; Resources (Archived) `wix_resource_row_id`.
+- **Before deleting:** every value backed up (45 contacts, 151 profiles, 93 resources) to
+  `docs/audits/2026-10-30-wix-field-cleanup/backup-field-values.json` + `wix-id-crosswalk.csv` (294 Wix ids) —
+  **local only, `docs/audits/` is now gitignored**. Final contact-vs-Profile diff: all 45 contacts have a Profile; every
+  difference was the Profile being newer (programs/collectives added, profile tagger re-tags). Nothing lost.
+- **Code (`10b20a7`):** commits the 10-26 Wix kill switch; removes the contact readiness-tagger (enricher, tests, default
+  gate, `nightly-readiness.yml`, readiness-tag-run / seed-enricher-config / prove-gate-config, expert e2e scripts) and
+  `lib/wix-sync/pipeline.ts`. Classifier prompt → `readinessPrompt.ts` (profileTagger). `/api/sync/up` no longer runs a
+  contact→Team step. `/api/wix-sync` + `/api/readiness-tag` are authenticated 200 no-ops. Postgres
+  `enricher_configs` readiness-tagger::contact → `enabled=false`. No `field_mappings` row referenced a deleted field.
+- **Verified live after delete:** `/api/sync/up?dryRun=1` and `/api/profile-sync?dryRun=1` both 200 and normal.
+- **Zach chose (10-30):** delete now even though the old **Become an Expert Form** `2VJrENRVVzj5PuUhH6y0` used these fields —
+  it has lost those questions until it is rebuilt on Profiles (already on his list; answers had no path to Profiles since 10-21).
+- ⬜ **Zach:** remove any GHL workflow webhook steps calling `/api/wix-sync` or `/api/readiness-tag` (they now return
+  `retired:true`); glance at workflows/smart lists that filtered on "Website Profile Status" or Website Team Tags.
+- Still standing (by choice): Resources (Archived) object; Wix code paths behind `WIX_RETIRED`; `wix_mapping_*` tables;
+  `WIX_*` env vars (keep `WIX_SYNC_WEBHOOK_SECRET` — shared by live hooks).
+
 ## ✅ 2026-10-27 — Donors LIVE on Profiles (22 imported, verified, idempotent)
 - **Kiosk / website query:** Profiles where `donor_status` = `current` (21) or `past` (1: Jackson Anchor Initiative,
   defunct, funded LRL's first years, no logo) AND `profile_status` = `published`, sorted by `rank_donors`
@@ -378,7 +401,7 @@ Resources**; `service_areas` is a real multi-select (29 snake keys, `serviceKey(
   (3) AI Studio directory proxy reads Profiles + Resources only; (4) rank fields on Resources + the
   drag-and-drop ranking page; (5) retire contact website fields. **Until (1) lands, profile edits made on the
   contact do not flow to the profile — re-run `profiles-migrate.ts --apply` (idempotent) after edits.**
-- ⬜ **CLEANUP OWED (Zach, 2026-10-21): delete the profile folder + custom fields from the CONTACT record** now that
+- ✅ **DONE 2026-10-30 (see top entry). Original note:** ~~delete the profile folder + custom fields from the CONTACT record~~ now that
   Profiles hosts this content. Folder "Form | WIX Team CMS Profile" `8rSDnE9E7nehea0Xsn0F` and its fields:
   `contact.status` `uhMXVvv2sWa15VUwnxdi`, `website_team_tags` `TCCMGrG6Pv9Lfhga0Fi0`, `programs` `58YNmbkHWahxdwn9yb9f`,
   `collectives` `lW17fW7GSnbfvugy7CLR`, `biowho_you_are` `5DsGtcbAWOR2cNLYFQf2`, `linkedin` `YSS7z08zleBB2Hy1J5VD`,
