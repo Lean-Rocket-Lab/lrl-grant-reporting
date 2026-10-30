@@ -181,6 +181,53 @@
 
 ---
 
+## ✅ 2026-10-27 — Donors LIVE on Profiles (22 imported, verified, idempotent)
+- **Kiosk / website query:** Profiles where `donor_status` = `current` (21) or `past` (1: Jackson Anchor Initiative,
+  defunct, funded LRL's first years, no logo) AND `profile_status` = `published`, sorted by `rank_donors`
+  (Wix order 1–21, JAI 22). Logo = `company_logo[0].url` (all 21 load publicly, 200).
+- Fields (scripts-ts/donors-setup.ts): `donor_status` SINGLE_OPTIONS current|past (Profile Info) `Y38n6QqulbcgIAhyMpFm` ·
+  `rank_donors` NUMERICAL (Page Ranking) `5mlCVv9oSqw7BPSKRC0D` · `wix_funder_row_id` TEXT ([SYNC] System)
+  `dJNR9wXLb5tRo2mix63w` · profile_type + `organization` (read back, person/resource kept).
+- Import (scripts-ts/donors-import.ts, input reports/wix-funders-2026-10-26.json, ledger
+  reports/donors-profiles-ledger.json): 15 created as `organization`, 7 existing Resource profiles got only the
+  3 donor fields (they KEEP their Resource logo + data). 16 profile_company links added (incl. parent links:
+  Eaton Aerospace → Eaton Corporation, Henry Ford Allegiance → Henry Ford Health Systems, Consumers Energy
+  Foundation → Consumers Energy). Unlinked: Willis Foundation, Jackson DDA (no company record). Re-run = 22 no-ops.
+- ⚠️ The website/kiosk Resources filter must stay `profile_type=resource` — `organization` profiles are donors only.
+
+### Background (2026-10-26)
+- Source: Wix Funders CSV, 22 rows (Jackson Anchor Initiative = empty row; JAI is defunct, funded LRL's early years).
+- **Logos off Wix:** 21 logos (512×512 PNG, white-on-transparent for dark backgrounds) uploaded to Media Library
+  **Website › Donor Logos** `6adf4ddac9d5b7168d94e929`, all public-checked 200. Ledger with URLs:
+  `reports/donor-logos-ledger.json`. Cardinal Group + TRUE CCU Wix files were flattened on grey (217); keyed to
+  transparent by hand. JAI has no logo anywhere.
+- **Merged:** "Alro Steel" `69406db7…` → **Alro** `692619cb…376c` (1 contact); "Thecardinalgroup.net" `692619d3…`
+  → **The Cardinal Group** `69495f58…` (2 contacts, companyName updated, survivor domain set to the email domain
+  thecardinalgroup.net). Losers 404. Log: `docs/audits/2026-10-13-domain-switch/merges-applied-2026-10-26-alro-cardinal.json`.
+  Gotcha: `DELETE /objects/business/records/{id}` 422s if you pass `?locationId=`.
+- **Proposed design (awaiting Zach):** donor = relationship, not a Profile Type (7 donors are already Resource
+  profiles). New `donor_status` single-select (current / past), `rank_donors` NUMERICAL, `wix_funder_row_id` sync
+  field, new profile_type option `organization` for donor-only orgs; link via `profile_company`.
+- Parent links proposed: Eaton Aerospace → Eaton Corporation `692619cb…3773`; Henry Ford Allegiance → Henry Ford
+  Health Systems `692619ca…3734`; Consumers Energy Foundation → Consumers Energy `692619cd…37c9`.
+- No company record: Phil & Pat Willis Foundation (Phil Willis is a contact on "Willis and Jurasek"), Jackson DDA.
+  JAI company record still holds cai-engr.com (belongs to Commonwealth Associates) — clear it.
+
+## ✅ 2026-10-26 — Wix RETIRED: every GHL→Wix path switched off (nothing deleted)
+
+The public site is GHL (leanrocketlab.org); the Wix premium plan is lapsing.
+- **Kill switch:** `WIX_RETIRED = true` in `lib/wix/config.ts` → `hasWix` false, `getWixConfig()` throws,
+  `WixClient.request`/token refuse before `fetch`. Covers webhooks, `/mappings` Wix pages and every CLI
+  script (`npm run wix:sync` etc.). `profiles-migrate.ts` (the one raw Wix fetch) checks it too.
+- **Readiness enrich kept:** `runContactTeamPipeline` skips its Wix step; `/api/sync/up` now gates the
+  pipeline on the DB only (gating on `hasWix` would have silently stopped readiness tagging), and
+  `/api/wix-sync` no longer 503s — it enriches and answers 200 so any GHL workflow still calling it runs clean.
+- **Postgres:** `wix_mapping_sets` "Contact → Team" set `enabled=false` (was the last live set; 88 Wix
+  writes via contact-changed, last 2026-10-02). Rows, data, env vars (`WIX_*`) all kept.
+  `WIX_SYNC_WEBHOOK_SECRET` must stay — form-sync, profile-sync, event-registration-sync etc. share it.
+- GHL workflow steps can't be read via API (403 `WORKFLOW_API_NOT_ENABLED_FOR_LOCATION`), so which
+  workflows still have a `/api/wix-sync` webhook step is unverified — harmless either way.
+
 ## 🔄 2026-10-21 — Churchill → MSRL (Main Street Readiness Level): CODE DONE, nothing live yet
 
 Spec + rollout: **`docs/sprints/msrl-migration.md`**. Zach's calls: LLM rubric scorer (code computes the
@@ -1861,3 +1908,8 @@ share both halves of the key.
 > companies merged, 13 merge pairs + 39 domain reviews waiting on Zach in
 > `docs/audits/2026-10-13-domain-switch/`.
 > ---
+
+
+## 📌 Queued spec (2026-10-29) — Milestones module
+
+> `docs/sprints/milestones-module.md`: Milestones as its own tab; live client document (tokenised public link) first, one-click PDF second, ≤5-row bulk-create form third. Client rule: hide Proposed and hide AI-sourced. Not scheduled against Sprint D; Zach to slot it.

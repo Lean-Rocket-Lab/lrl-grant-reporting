@@ -12,7 +12,7 @@ export { countyEnricher, countyRawToLabel } from './enrichers/county';
 export { geoZoneEnricher } from './enrichers/geoZone';
 export { laraIdEnricher } from './enrichers/laraId';
 export { naicsEnricher, deriveNaicsText } from './enrichers/naics';
-export { readinessTagger, rederiveProposals, deriveProfileText, passesMembershipGate } from './enrichers/readinessTagger';
+export { READINESS_SYSTEM_PROMPT } from './enrichers/readinessPrompt';
 export { resourceTagger, deriveResourceText, buildResourceProposals } from './enrichers/resourceTagger';
 export { profileTagger, deriveProfileRecordText, buildProfileProposals } from './enrichers/profileTagger';
 export { grantReasonEnricher, readLineItems, GRANT_REASON_FIELD, GRANT_REASON_SYSTEM_PROMPT } from './enrichers/grantReason';
@@ -21,7 +21,6 @@ import { countyEnricher } from './enrichers/county';
 import { geoZoneEnricher } from './enrichers/geoZone';
 import { laraIdEnricher } from './enrichers/laraId';
 import { naicsEnricher } from './enrichers/naics';
-import { readinessTagger } from './enrichers/readinessTagger';
 import { resourceTagger } from './enrichers/resourceTagger';
 import { profileTagger } from './enrichers/profileTagger';
 import { grantReasonEnricher } from './enrichers/grantReason';
@@ -30,8 +29,9 @@ import { Enricher, ContactEnricher, RecordEnricher } from './types';
 /** Default company enricher registry. NAICS is AI-classified; LARA is a no-op until its source is wired. */
 export const defaultEnrichers: Enricher[] = [countyEnricher, geoZoneEnricher, naicsEnricher, laraIdEnricher];
 
-/** Default CONTACT enricher registry (currently the readiness-tagger). */
-export const defaultContactEnrichers: ContactEnricher[] = [readinessTagger];
+/** Default CONTACT enricher registry. Empty since 2026-10-30: the contact readiness-tagger was retired
+ *  (website profiles + their readiness tags live on custom_objects.profiles — see profileTagger). */
+export const defaultContactEnrichers: ContactEnricher[] = [];
 
 /** Default RECORD (custom-object) enricher registry + the object each targets. */
 export const defaultRecordEnrichers: Array<{ enricher: RecordEnricher; sourceObject: string }> = [

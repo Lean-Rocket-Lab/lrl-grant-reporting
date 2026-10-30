@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { shouldWriteDerived } from '../derived';
-import { buildProposals } from '../enrichers/readinessTagger';
+import { buildProfileProposals } from '../enrichers/profileTagger';
 
 describe('shouldWriteDerived', () => {
   it('writes a derived field when one of its drivers is being written', () => {
@@ -24,14 +24,16 @@ describe('shouldWriteDerived', () => {
   });
 });
 
-describe('readinessTagger marks the rationale as derived', () => {
+describe('profileTagger marks the rationale as derived', () => {
+  // Ported 2026-10-30 from the retired contact readinessTagger: the same guard, on Profiles.
   it('tags readiness_rationale with its driver fields, and nothing else', () => {
-    const proposals = buildProposals(['gtm'] as any, 'High', false, 'Strong GTM background.', 'ai');
-    const rationale = proposals.find((p) => p.contactKey === 'contact.readiness_rationale');
-    const serviceAreas = proposals.find((p) => p.contactKey === 'contact.service_areas');
+    const k = 'custom_objects.profiles';
+    const proposals = buildProfileProposals(k, ['gtm'] as any, 'High', false, 'Strong GTM background.', 'ai');
+    const rationale = proposals.find((p) => p.fieldKey === `${k}.readiness_rationale`);
+    const serviceAreas = proposals.find((p) => p.fieldKey === `${k}.service_areas`);
 
-    expect(rationale?.derivedFrom).toContain('contact.service_areas');
-    expect(rationale?.derivedFrom).toContain('contact.trl_stops');
+    expect(rationale?.derivedFrom).toContain(`${k}.service_areas`);
+    expect(rationale?.derivedFrom).toContain(`${k}.trl_stops`);
     // The structured outputs are the source of truth — they must NOT be derived.
     expect(serviceAreas?.derivedFrom).toBeUndefined();
   });

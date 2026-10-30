@@ -24,25 +24,11 @@ const TTL_MS = 5 * 60 * 1000;
 
 /**
  * Code defaults = the behavior before this table existed, keyed by "<enricher>::<sourceObject>".
- * The readiness tagger's gate is pinned here so cutover is a no-op even if the row is never seeded:
- * status ∈ {Approved} AND website_team_tags ∋ {Team,EIR} (one group, ANDed).
+ * Each tagger's gate is pinned here so behaviour is defined even if its row is never seeded.
  */
 export const DEFAULT_ENRICHER_CONFIGS: Record<string, EnricherConfig> = {
-  'readiness-tagger::contact': {
-    enricher: 'readiness-tagger',
-    sourceObject: 'contact',
-    enabled: true,
-    combine: 'AND',
-    groups: [
-      {
-        combine: 'AND',
-        filters: [
-          { field: 'contact.status', anyOf: ['Approved'] },
-          { field: 'contact.website_team_tags', anyOf: ['Team', 'EIR'] },
-        ],
-      },
-    ],
-  },
+  // 'readiness-tagger::contact' RETIRED 2026-10-30 with the contact profile fields; a stored row under
+  // that key is never read again.
   // Resource profiles (2026-10-23): Resources moved onto custom_objects.profiles with
   // profile_type = Resource (docs/sprints/profiles-resources-merge.md). The old
   // 'resource-tagger::custom_objects.resources' key is retired with the archived object; a stored row

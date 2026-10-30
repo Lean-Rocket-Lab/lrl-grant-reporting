@@ -23,9 +23,6 @@ import { enrichCompany, defaultEnrichers } from '@/lib/enrichment';
 import { runStageScoreTrigger } from '@/lib/stage/trigger';
 import { readRecordFields } from '@/lib/ghl/records';
 import { getEnricherState, setEnricherState, normalizeCompanyAddress, addressNeedsGeocode, isGeocodableAddress } from '@/lib/enrichment/stateStore';
-import { hasDatabase } from '@/lib/db';
-import { hasWix } from '@/lib/wix/config';
-import { runContactTeamPipeline } from '@/lib/wix-sync/pipeline';
 import { withRun, newRunId } from '@/lib/audit/context';
 import { ackAndRun, wantsAsync } from '@/lib/webhooks/fastAck';
 
@@ -146,20 +143,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Contact → Team pipeline: readiness enrich (on status=Approved) + Wix Team sync. This makes
-    // ONE "Contact Changed" webhook fan out to everything. Non-fatal + isolated: any failure here
-    // must never break the company up/down sync above, so it's wrapped and only runs when the DB +
-    // Wix are configured. (The same pipeline is also exposed standalone at /api/wix-sync.)
-    let readiness: unknown = null;
-    if (hasDatabase && hasWix) {
-      try {
-        readiness = await runContactTeamPipeline(String(contactId), catalogs.contact, { apply: !dryRun });
-      } catch (e: any) {
-        readiness = { error: e?.message ?? 'readiness/Wix pipeline failed' };
-      }
-    }
-
-    return { ok: true, dryRun, contactId, companyId, up: upResp, down: downResp, enrich, stageScore, readiness };
+    // The contact → Team pipeline (contact readiness enrich + Wix Team sync) that used to run here was
+    // retired 2026-10-30: Wix is gone and website profiles live on custom_objects.profiles.
+    return { ok: true, dryRun, contactId, companyId, up: upResp, down: downResp, enrich, stageScore };
   } catch (e: any) {
     console.error('sync/up error:', e);
     // Rethrow so the caller decides how to surface it: a synchronous request gets a 500, an

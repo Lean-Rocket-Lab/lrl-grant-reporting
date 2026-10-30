@@ -30,8 +30,22 @@ const DEFAULT_BASE_URL = 'https://www.wixapis.com';
 const DEFAULT_TOKEN_URL = 'https://www.wixapis.com/oauth2/token';
 const DEFAULT_USER_AGENT = 'lrl-ops-app/1.0';
 
-/** True when enough Wix credentials are present to make authenticated calls. */
-export const hasWix = Boolean(
+/**
+ * KILL SWITCH (2026-10-26). The public site moved to GHL (leanrocketlab.org) and the Wix premium
+ * plan is lapsing, so nothing in this app may talk to the old Wix site any more. While this is true:
+ * `hasWix` is false, `getWixConfig()` throws, and `WixClient` refuses every request before fetch —
+ * so webhooks, admin pages and CLI scripts alike are cut off. Code, data and env vars are kept;
+ * flip to false (and re-enable a mapping set) only if Wix ever comes back.
+ */
+export const WIX_RETIRED = true;
+
+/** Throw if Wix is retired. Called at every point that could reach the Wix API. */
+export function assertWixEnabled(): void {
+  if (WIX_RETIRED) throw new Error('Wix is retired (lib/wix/config.ts WIX_RETIRED) — no Wix API calls are made.');
+}
+
+/** True when Wix is not retired and enough credentials are present to make authenticated calls. */
+export const hasWix = !WIX_RETIRED && Boolean(
   process.env.WIX_API_TOKEN ||
     (process.env.WIX_OAUTH_CLIENT_ID && process.env.WIX_OAUTH_CLIENT_SECRET && process.env.WIX_APP_INSTANCE_ID),
 );
@@ -47,6 +61,7 @@ function requireEnv(name: string): string {
 }
 
 export function getWixConfig(): WixConfig {
+  assertWixEnabled();
   const base: Omit<WixConfig, 'clientId' | 'clientSecret' | 'instanceId' | 'staticToken'> = {
     baseUrl: process.env.WIX_BASE_URL || DEFAULT_BASE_URL,
     tokenUrl: process.env.WIX_OAUTH_TOKEN_URL || DEFAULT_TOKEN_URL,

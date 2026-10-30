@@ -15,13 +15,9 @@ import type { EnricherConfigRow } from '../../db/schema';
 const row = (o: Record<string, unknown>) => o as unknown as EnricherConfigRow;
 
 describe('code defaults', () => {
-  it('seeds readiness as one ANDed group [Approved, Team/EIR] — cutover no-op', () => {
-    const d = DEFAULT_ENRICHER_CONFIGS['readiness-tagger::contact'];
-    expect(d.combine).toBe('AND');
-    expect(d.groups).toEqual([{ combine: 'AND', filters: [
-      { field: 'contact.status', anyOf: ['Approved'] },
-      { field: 'contact.website_team_tags', anyOf: ['Team', 'EIR'] },
-    ] }]);
+  it('the retired contact readiness-tagger has no default any more (2026-10-30)', () => {
+    expect(DEFAULT_ENRICHER_CONFIGS['readiness-tagger::contact']).toBeUndefined();
+    expect(DEFAULT_ENRICHER_CONFIGS['profile-tagger::custom_objects.profiles']).toBeDefined();
   });
   it('unknown enricher => permissive always-run (no groups)', () => {
     expect(defaultEnricherConfig('mystery', 'contact')).toEqual({ enricher: 'mystery', sourceObject: 'contact', enabled: true, groups: [], combine: 'AND' });
@@ -30,7 +26,7 @@ describe('code defaults', () => {
 
 describe('configFromRow — read precedence', () => {
   it('no row => code default', () => {
-    expect(configFromRow(null, 'readiness-tagger', 'contact')).toEqual(DEFAULT_ENRICHER_CONFIGS['readiness-tagger::contact']);
+    expect(configFromRow(null, 'profile-tagger', 'custom_objects.profiles')).toEqual(DEFAULT_ENRICHER_CONFIGS['profile-tagger::custom_objects.profiles']);
   });
 
   it('prefers the groups column (two-level, top-level OR)', () => {

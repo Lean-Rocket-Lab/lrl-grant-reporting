@@ -39,3 +39,6 @@ reports/
 
 # temp files from Cowork Square feature build (safe to delete)
 _to_delete/
+
+# raw GHL exports (contacts/companies PII) — never commit
+docs/audits/

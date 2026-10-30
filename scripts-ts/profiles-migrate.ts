@@ -1,6 +1,9 @@
 // scripts-ts/profiles-migrate.ts — copy website profiles from contact fields onto Profile records and
 // associate each to its contact (docs/sprints/profiles-object.md, phase 2).
 //
+// ⚠️ DONE + RETIRED 2026-10-30: the contact source fields (folder "Form | WIX Team CMS Profile") were
+// deleted after a final contact-vs-Profile diff; the population is now empty. Kept for history only.
+//
 //   npx tsx scripts-ts/profiles-migrate.ts                  # DRY RUN: print the mapped payload per contact
 //   npx tsx scripts-ts/profiles-migrate.ts --apply --only=<contactId>   # one record first
 //   npx tsx scripts-ts/profiles-migrate.ts --apply          # everyone
@@ -12,6 +15,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { WIX_RETIRED } from '../lib/wix/config';
 
 function loadEnvLocal() {
   try {
@@ -65,7 +69,7 @@ const arr = (v: unknown): string[] =>
 async function wixLocalRanks(): Promise<Record<string, number>> {
   // Wix Team `localDisplayRanking` (100 = unranked) keyed by ghlContactId. Wix-only seed for rank_local.
   const out: Record<string, number> = {};
-  if (!process.env.WIX_API_TOKEN) return out;
+  if (!process.env.WIX_API_TOKEN || WIX_RETIRED) return out;
   const r = await fetch('https://www.wixapis.com/wix-data/v2/items/query', {
     method: 'POST',
     headers: { Authorization: process.env.WIX_API_TOKEN!, 'wix-site-id': process.env.WIX_SITE_ID!, 'Content-Type': 'application/json' },

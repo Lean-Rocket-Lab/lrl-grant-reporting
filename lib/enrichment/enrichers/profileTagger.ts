@@ -15,7 +15,7 @@
 import type { Provenance, RecordEnricher, RecordEnricherInput, RecordEnrichmentProposal } from '../types';
 import { hasAnthropic, classifyJson, CLASSIFIER_MODEL } from '../../ai/anthropic';
 import { SERVICES, SERVICE_KEYS, LINE_KEYS, LINE_STOP_BARE, deriveStops, normalizeTags, type ServiceTag } from '../data/readiness';
-import { READINESS_SYSTEM_PROMPT } from './readinessTagger';
+import { READINESS_SYSTEM_PROMPT } from './readinessPrompt';
 
 export const PROFILES_OBJECT = 'custom_objects.profiles';
 

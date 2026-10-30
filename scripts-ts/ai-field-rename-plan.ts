@@ -41,7 +41,7 @@ const ANY_PREFIX = /^\[(AI|SYNC)\]\s*/;
     import('../lib/enrichment/enrichers/geoZone'),
     import('../lib/enrichment/enrichers/laraId'),
     import('../lib/enrichment/enrichers/naics'),
-    import('../lib/enrichment/enrichers/readinessTagger'),
+    import('../lib/enrichment/enrichers/profileTagger'),
     import('../lib/enrichment/enrichers/resourceTagger'),
   ]);
 

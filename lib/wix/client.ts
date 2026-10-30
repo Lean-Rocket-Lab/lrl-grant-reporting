@@ -4,7 +4,7 @@
 // adds an OAuth token manager: it exchanges the app's client credentials for a short-lived
 // access token, caches it until just before expiry, and refreshes on demand / on a 401.
 
-import { getWixConfig, WixConfig } from './config';
+import { assertWixEnabled, getWixConfig, WixConfig } from './config';
 import { WixApiError } from './errors';
 
 export interface WixRequestOptions {
@@ -64,6 +64,7 @@ export class WixClient {
 
   /** Resolve a bearer token: static override, cached OAuth token, or a fresh exchange. */
   private async accessToken(force = false): Promise<string> {
+    assertWixEnabled();
     if (this.config.staticToken) return this.config.staticToken;
     if (!force && this.token && Date.now() < this.token.expiresAt - TOKEN_SKEW_MS) {
       return this.token.value;
@@ -113,6 +114,7 @@ export class WixClient {
 
   /** Core request with retry. Returns parsed JSON (typed as T). */
   async request<T = any>(opts: WixRequestOptions): Promise<T> {
+    assertWixEnabled(); // kill switch — also covers a client built with an injected config
     const method = opts.method ?? 'GET';
     const url = this.buildUrl(opts);
     const hasBody = opts.body !== undefined && opts.body !== null;
