@@ -181,6 +181,20 @@
 
 ---
 
+## ✅ 2026-10-30 (later) — Wix fully removed + Resources (Archived) object DELETED (`2c611cd`, deployed)
+
+- **GHL:** 94 archived Resource records deleted via API, then the object itself in the UI (Settings → Objects; no API
+  exists for object delete). Its 4 associations went with it. Pre-check: every relation (27 company, 5 contact,
+  1 referral, 3 milestone) already existed on the matching Profile; 1 activity's `counterparty_id` re-pointed from the
+  archived resource to its Profile `6adb850240c4df66f54fee30`. Backup: `docs/audits/2026-10-30-wix-field-cleanup/resources-archived-object-backup.json`.
+- **Code:** lib/wix, lib/wix-sync, Wix mapping store/types, /api/wix/*, /wix-sync page, Wix connection editor, wix-embed/,
+  WIX_CMS_SYNC_SPEC.md and all Wix-only + archived-resource scripts deleted. Field Mappings is GHL-only. Stubs kept:
+  /api/wix-sync, /api/resource-sync, /api/readiness-tag.
+- **Postgres:** `wix_mapping_sets` (2) + `wix_mapping_rows` (38) dropped after JSON backup (same folder).
+- **Env:** `WIX_API_TOKEN` + `WIX_SITE_ID` removed from .env.local and Vercel. **Kept `WIX_SYNC_WEBHOOK_SECRET`** (live hooks).
+  ⬜ GitHub Actions secrets `WIX_API_TOKEN` / `WIX_SITE_ID`: delete needs Zach's passkey (no workflow reads them).
+- Verified live: sync/up + profile-sync dry runs 200 and normal; tsc + next build clean.
+
 ## ✅ 2026-10-30 — Wix-era GHL fields DELETED + contact readiness-tagger retired (`10b20a7`, deployed)
 
 - **Deleted (API, read back gone):** contact folder "WIX Team CMS Profile" `8rSDnE9E7nehea0Xsn0F` and all 15 fields
