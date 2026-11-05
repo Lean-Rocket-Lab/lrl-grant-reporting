@@ -32,6 +32,13 @@ jobs:
           GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
           GHL_CUSTOM_OBJECT_ID: ${{ secrets.GHL_CUSTOM_OBJECT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: Link stage and milestone records to company contacts (client hub visibility)
+        if: always()
+        run: npx vite-node scripts-ts/portal-links-run.ts --apply --yes
+        env:
+          GHL_TARGET: live
+          GHL_API_KEY: ${{ secrets.GHL_API_KEY }}
+          GHL_LOCATION_ID: ${{ secrets.GHL_LOCATION_ID }}
       - name: Upload reconcile report
         if: always()
         uses: actions/upload-artifact@v4

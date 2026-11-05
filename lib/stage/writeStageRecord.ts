@@ -1,7 +1,8 @@
 // lib/stage/writeStageRecord.ts — CREATE a new Client Stage Tracking record per scoring event and
 // associate it to the company. Unlike the fill-empty enrichment engines (recordEngine/contactEngine),
 // the scorer appends a NEW record each run (per-company scoring HISTORY), mirroring the write path in
-// scripts-ts/backfill-client-stage.ts. Object: custom_objects.business_stage; assoc: company_business_stage.
+// scripts-ts/backfill-client-stage.ts. Object: custom_objects.business_stage; assoc: company_business_stage,
+// plus business_stage_contact to each company contact so the record shows in the client hub.
 
 import { GhlClient, ghl } from '../ghl/client';
 import { createRelation } from '../ghl/associations';
@@ -10,6 +11,7 @@ import { writeRecordFields } from '../ghl/writeRecord';
 import type { CustomFieldCatalog } from '../ghl/types';
 import type { StageScore } from './scoreCompany';
 import { STAGE_OBJECT } from './priorAssessment';
+import { linkRecordToCompanyContacts, type LinkResult } from '../portal/contactLinks';
 
 export interface BuildStagePropsInput {
   score: StageScore;
@@ -85,7 +87,7 @@ export interface CreateStageRecordDeps {
 export async function createStageRecord(
   input: BuildStagePropsInput,
   deps: CreateStageRecordDeps,
-): Promise<{ recordId: string; properties: Record<string, unknown> }> {
+): Promise<{ recordId: string; properties: Record<string, unknown>; contactLinks: LinkResult }> {
   const client = deps.client ?? ghl();
   const properties = buildStageProperties(input, deps.catalog);
   const res = await client.request<any>({
@@ -100,7 +102,16 @@ export async function createStageRecord(
     { associationId: deps.assocId, firstRecordId: deps.companyId, secondRecordId: recordId },
     client,
   );
-  return { recordId, properties };
+  // The client hub shows this record only to contacts linked to it, so link the company's people.
+  // Best effort: the record and its company link are what scoring depends on, and the nightly
+  // portal-links sweep retries anything that fails here.
+  let contactLinks: LinkResult;
+  try {
+    contactLinks = await linkRecordToCompanyContacts(STAGE_OBJECT, recordId, deps.companyId, { client, recordRels: [] });
+  } catch (e: any) {
+    contactLinks = { linked: [], failed: [{ contactId: '*', error: String(e?.message ?? e).slice(0, 300) }] };
+  }
+  return { recordId, properties, contactLinks };
 }
 
 /**
