@@ -137,6 +137,7 @@ describe('ingestEventRegistration', () => {
   it('sends GA4 (no PII) and LinkedIn (hashed email + li_fat_id) under the same key', async () => {
     process.env.GA4_MEASUREMENT_ID = 'G-TEST'; process.env.GA4_API_SECRET = 's';
     process.env.LINKEDIN_CAPI_TOKEN = 't'; process.env.LINKEDIN_EVENT_CONVERSION_ID = '999';
+    process.env.META_PIXEL_ID = 'p'; process.env.META_CAPI_TOKEN = 't';
     const f = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({}), text: async () => '' })) as any;
     const r = await ingestEventRegistration(
       { contactId: CONTACT.id, eventId: 'ev1', eventName: 'AMTC Lunch & Learn', amount: 25 },
@@ -144,6 +145,7 @@ describe('ingestEventRegistration', () => {
     );
     expect(r.conversions?.ga4.status).toBe('sent');
     expect(r.conversions?.linkedin.status).toBe('sent');
+    expect(r.conversions?.meta?.status).toBe('sent');
     const ga = f.mock.calls.find((c: any) => String(c[0]).includes('google-analytics'));
     const gaBody = JSON.parse(ga[1].body);
     expect(gaBody.client_id).toBe('1664579354.1792433630');
@@ -155,6 +157,18 @@ describe('ingestEventRegistration', () => {
     expect(liBody.eventId).toBe(`ev1:${CONTACT.id}`);
     expect(liBody.user.userIds).toEqual(expect.arrayContaining([expect.objectContaining({ idType: 'LINKEDIN_FIRST_PARTY_ADS_TRACKING_UUID', idValue: 'fat-1' })]));
     expect(JSON.stringify(liBody)).not.toContain('zach@leanrocketlab.org');
+    const fb = f.mock.calls.find((c: any) => String(c[0]).includes('facebook'));
+    const fbBody = JSON.parse(fb[1].body);
+    expect(fbBody.data[0].event_name).toBe('CompleteRegistration');
+    expect(fbBody.data[0].event_id).toBe(r.eventKey);
+    expect(fbBody.data[0].event_id).toBe(liBody.eventId);
+    expect(JSON.stringify(fbBody)).not.toContain('zach@');
+  });
+
+  it('skips Meta as not-configured when META_PIXEL_ID is unset', async () => {
+    delete process.env.META_PIXEL_ID;
+    const r = await ingestEventRegistration({ contactId: CONTACT.id, eventId: 'ev1', eventName: 'X' }, { client: fakeClient });
+    expect(r.conversions?.meta).toMatchObject({ status: 'skipped', reason: 'not-configured' });
   });
 
   it('with nothing configured, conversions skip and the activity still lands', async () => {

@@ -30,6 +30,7 @@ import { upsertActivity, type UpsertActivityResult } from '../upsert';
 import type { CreateActivityOptions } from '../create';
 import { sendGa4Event, gaClientIdFromLinker, gaSessionIdFromLinker, fallbackGaClientId, type Ga4Result } from '../../conversions/ga4';
 import { sendLinkedInConversion, liFatIdFromUrl, type LinkedInResult } from '../../conversions/linkedin';
+import { sendMetaConversion, fbclidFromUrl, type MetaResult } from '../../conversions/meta';
 import { sendOnce } from '../../conversions/ledger';
 
 export const EVENT_SOURCE = 'GHL Event' as const;
@@ -63,6 +64,7 @@ export interface EventRegistrationResult {
   conversions?: {
     ga4: Ga4Result | { status: 'skipped'; reason: 'already-sent' };
     linkedin: LinkedInResult | { status: 'skipped'; reason: 'already-sent' };
+    meta?: MetaResult | { status: 'skipped'; reason: 'already-sent' };
   };
 }
 
@@ -314,7 +316,7 @@ export async function ingestEventRegistration(
   const value = input.amount && input.amount > 0 ? { amount: input.amount, currencyCode: (input.currency || 'USD').toUpperCase() } : null;
   const fetchImpl = opts.fetchImpl;
 
-  const [ga4, linkedin] = await Promise.all([
+  const [ga4, linkedin, meta] = await Promise.all([
     sendOnce('ga4', eventKey, () => sendGa4EventWithSyntheticSession({
       // GHL stores null here for event registrations (no GA tag on Events pages). In order: the `_gl`
       // linker from a Wix click, then — unless GA4_EVENT_FALLBACK=0 — a stable per-contact pseudo id
@@ -353,7 +355,23 @@ export async function ingestEventRegistration(
       eventId: eventKey,
       value,
     }, { dryRun: opts.dryRun, fetchImpl }), { dryRun: opts.dryRun }),
+    // Meta: CompleteRegistration from the server. The GHL Events page's own Meta Pixel setting must NOT also map registration (double count) — only page views.
+    sendOnce('meta', eventKey, () => sendMetaConversion({
+      eventName: 'CompleteRegistration',
+      eventId: eventKey,
+      occurredAt: registeredAt,
+      email: contact.email,
+      phone: contact.phone,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      sourceUrl: attr.url ?? null,
+      fbclid: fbclidFromUrl(attr.url) ?? fbclidFromUrl(contact.firstAttribution?.url),
+      clientIp: attr.ip ?? attr.ipAddress ?? null,
+      userAgent: attr.userAgent ?? attr.user_agent ?? null,
+      value,
+      customData: { content_name: eventName.slice(0, 100), content_ids: input.eventId },
+    }, { dryRun: opts.dryRun, fetchImpl }), { dryRun: opts.dryRun }),
   ]);
 
-  return { ...base, eventKey, status: 'ingested', activity, eventType, conversions: { ga4: ga4.result, linkedin: linkedin.result } };
+  return { ...base, eventKey, status: 'ingested', activity, eventType, conversions: { ga4: ga4.result, linkedin: linkedin.result, meta: meta.result } };
 }
