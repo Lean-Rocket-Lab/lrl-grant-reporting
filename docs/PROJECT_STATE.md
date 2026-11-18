@@ -1,5 +1,7 @@
 # PROJECT STATE — LRL Operations Platform
 
+> **2026-11-04 — Profile intake built, NOT deployed.** New person/resource form submissions (Pending) get AI fill-in (fill-empty: category/sub/short description/bio/programs/collectives, website read for resources) + readiness tags + association checks before Aiden publishes. Spec: `docs/sprints/profile-intake.md`.
+
 > **This is the single source of truth for "where things stand right now."**
 > Start every planning chat here. Refreshed daily by the maintenance routine.
 > Companion docs: `PROJECT_ROADMAP.md` (the phase/sprint plan) · `CANONICAL_REPORTING_MODEL.md` (data spec).
@@ -180,6 +182,67 @@
 > because it is old. See the doc map.
 
 ---
+
+## ✅ 2026-11-17 — Meta Pixel + Conversions API LIVE (`278c69b`, `8ec1eaf`); conversions now reach GA4 + LinkedIn + Meta
+
+- Dataset "Lean Rocket Lab Web" `1164391472851678` in the **LRL** Business Portfolio (`1436438550054270`),
+  linked to ad account `385825373061926`. Pages live in the other portfolio; nothing moved (Zach's call).
+- `META_PIXEL_ID` + `META_CAPI_TOKEN` on `.env.local` + Vercel (system-user token; "Conversions API
+  with Meta" auto-connect left OFF; Dataset Quality API not enabled). Not in GitHub Actions — nightly
+  jobs do not send conversions.
+- GTM **v10**: Meta Pixel base code, PageView only, all GHL funnels + the AI Studio site (verified
+  firing once per page). No `fbq` conversion events in GTM — Lead (form), Schedule (booking) and
+  CompleteRegistration (event, `lib/activities/sources/eventRegistration.ts`, `sendOnce('meta', …)`)
+  go server-side, deduped on `event_id` = the ledger key.
+- Verified: `sendMetaConversion` dry run with `META_TEST_EVENT_CODE` → Lead "Processed / Received
+  from Server" in Events Manager › Test events. Re-run from the Mac VM with
+  `node --experimental-strip-types` (the repo's tsx/esbuild binary is darwin-only there).
+- Zach-owed: GHL Events' Meta Pixel ID setting must map **page views only**, or CompleteRegistration
+  is counted twice. Watch the first real events in Events Manager › Overview.
+- Still open: Google Ads (Conversion Linker tag in GTM, GA4 → Ads link + key-event import).
+
+## ✅ 2026-11-13 — Resource categories → two multi-selects on Profiles (fields LIVE, 95/96 backfilled; code NOT committed)
+
+Zach 2026-11-13: free-text `category` / `sub_category` become two `MULTIPLE_OPTIONS` fields so a resource can sit
+in several categories and staff pick from one list. Taxonomy + helpers: `lib/profiles/resourceCategories.ts`.
+
+| Field | Id | Options | Key / label convention |
+|---|---|---|---|
+| `resource_categories` "Resource Categories" | `XnGT5qvdTsqGVq98gFI2` | 7 | key `funding`, label `Funding` |
+| `resource_sub_categories` "Resource Sub-categories" | `ydGtEtIW0bYmgJ28WkDq` | 32 | key `funding__loans`, label `Funding › Loans` |
+
+- GHL picklists are flat, so the PARENT lives in the sub key AND label. Readers group subs by the label prefix
+  (`parentLabelOf`), because an option a staffer adds in the GHL UI gets a GHL-generated key. Staff convention when
+  adding a sub in the UI: label it `Parent › Sub`.
+- Merges (33 → 32 subs incl. per-parent repeats): "IT" + "Technology & IT Services" → IT & Technology;
+  "Prototyping Grant" → Grants; "Trade Association" → Membership.
+- `scripts-ts/resource-categories-setup.ts` (dry run default; `--apply`, `--fields-only`, `--from/--to` chunks).
+  Applied live: 95 written + read back, re-run = **95 noop**. Unresolved: Solomon Research & Analytics (blank, no
+  status). Claude for Startups → Software Discount (override).
+- **Old text fields untouched** and still populated: the website and the kiosk read them until they switch. Delete
+  `category` / `sub_category` only after both have switched.
+- Code readers switched (with legacy fallback): resource tagger prompt text, `/rankings` subtitle, referral search
+  subtitle. `tsc` clean; 28/28 touched tests pass (full suite: 1 unrelated pre-existing fail in
+  `lib/conversions/__tests__/site.test.ts`).
+- ⬜ `profileIntake` (uncommitted, 11-04) still proposes the OLD text fields; port it to the multi-selects before deploy.
+- ⬜ Zach: website filter, Become-a-Resource form field swap. Leland: kiosk.
+
+---
+
+## ✅ 2026-11-05 — Client hub visibility: stage + milestone records linked to company contacts (CODE DONE, not deployed)
+
+The LRL client hub (GHL Client App Builder, plan in `Projects/co-working-hub/docs/client-app-hub-plan.md`)
+shows Client Stage and Milestone records on company-scoped pages, but **the portal decides visibility through
+CONTACT links, even for company scope**. Associations `business_stage_contact` and `milestones_contact` (contact
+= first side) were created by the builder; 300 links were backfilled on 2026-11-04 (Zach approved).
+
+- `lib/portal/contactLinks.ts`: `linkRecordToCompanyContacts` + `sweepPortalContactLinks`. Only ADDS links.
+- `createStageRecord` now links each new stage record to the company's contacts (best effort; result in `contactLinks`).
+- Milestones are created by staff in GHL, not by this app, so they rely on the sweep:
+  `scripts-ts/portal-links-run.ts` (dry-run default; `--apply --yes`), added as a step in `nightly-reconcile.yml`.
+  The sweep also covers contacts who join a company after its records exist.
+- Live dry-run 2026-11-05: 235 records, 0 missing, 2 companies with no contacts (Operant Group, 419rides: their
+  8 stage records stay hidden until they get a contact).
 
 ## ✅ 2026-10-30 (later) — Wix fully removed + Resources (Archived) object DELETED (`2c611cd`, deployed)
 
@@ -432,7 +495,7 @@ Resources**; `service_areas` is a real multi-select (29 snake keys, `serviceKey(
 - Open for Zach: what page Wix `localDisplayRanking1` ranked (differs on 4 rows); Wix-only Team row
   "Aiden Brunin" has no GHL contact and was not migrated; GHL contact-merge test on a throwaway pair.
 
-## 🆕 2026-10-20 — Form + booking conversions server-side (GA4 · LinkedIn · Meta): BUILT, in shadow mode
+## ✅ 2026-10-20 — Form + booking conversions server-side (GA4 · LinkedIn · Meta): LIVE 10-20 (GA4/LinkedIn), Meta added 11-17
 
 **Spec: `docs/sprints/form-booking-conversions.md`** — go-live checklist at the bottom, in order.
 - New `/api/conversion-sync?type=form_submitted|meeting_booked` + `lib/conversions/site.ts`: GHL webhook →
