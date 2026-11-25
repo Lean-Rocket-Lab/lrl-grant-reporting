@@ -16,6 +16,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ackAndRun, wantsAsync } from '@/lib/webhooks/fastAck';
 import { describePayloadShape, extractEventPayload, ingestEventRegistration } from '@/lib/activities/sources/eventRegistration';
+import { runEventListTrigger } from '@/lib/lists/triggers';
 
 function authorized(req: NextApiRequest): boolean {
   const expected = process.env.WIX_SYNC_WEBHOOK_SECRET;
@@ -40,7 +41,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const dryRun = req.query.dryRun === '1' || (req.body as any)?.dryRun === true;
   const noConversions = req.query.noConversions === '1';
-  const work = () => ingestEventRegistration({ ...input, contactId: input.contactId! }, { dryRun, noConversions });
+  // Marketing lists (docs/sprints/email-lists.md): fault-isolated, after the activity + conversions.
+  const work = async () => {
+    const ingest = await ingestEventRegistration({ ...input, contactId: input.contactId! }, { dryRun, noConversions });
+    const lists = await runEventListTrigger({ contactId: input.contactId!, eventId: input.eventId, eventName: input.eventName }, { dryRun });
+    return { ...ingest, lists };
+  };
 
   if (wantsAsync(req)) {
     ackAndRun(res, work, { label: 'event-registration-sync', detail: { contactId: input.contactId, eventId: input.eventId, via } });

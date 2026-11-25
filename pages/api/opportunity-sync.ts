@@ -60,6 +60,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const dryRun = req.query.dryRun === '1' || (req.body as any)?.dryRun === true;
+  // Marketing lists: the opportunity trigger (lib/lists runOpportunityListTrigger) is built but NOT
+  // hooked in (Zach 2026-11-25): program deals are created by forms/surveys, which already trigger.
+  // Re-enable alongside coworking. See docs/sprints/email-lists.md.
   const work = () => ingestOpportunityById(id, { dryRun });
 
   if (wantsAsync(req)) {

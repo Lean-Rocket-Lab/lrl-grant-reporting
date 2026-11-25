@@ -1,5 +1,67 @@
 # PROJECT STATE — LRL Operations Platform
 
+> **2026-11-25 (late) — Marketing list triggers: forms + events DEPLOYED.** New `lib/lists/` (fields,
+> rules, eventMap, apply, triggers) puts contacts on the "List - X" checkbox fields from webhooks that
+> already arrive: every form/survey submission (`/api/conversion-sync`; form id from contact
+> `lastAttribution.mediumId`; Intake, SAMA application form + survey, LOCAL application, Join a
+> Collective) and event registrations (`/api/event-registration-sync`; Tags column of the Event_list_db
+> sheet, matched by GHL event id parsed from the embed code, then name). Add-only; read, diff, write
+> `{id, value:["Subscribed"]}`, read back; `noop` on re-delivery; fault-isolated after the existing
+> work; change_log actor `lists:form|event`. Re-add after a self-service opt-out is INTENDED (Zach).
+> **OFF for now (Zach 11-25): coworking (pipeline, affiliation, event tag) and the opportunity trigger**
+> (`runOpportunityListTrigger` built + tested but not hooked into `/api/opportunity-sync`; program
+> deals are created by forms/surveys anyway). Event_list_db shared with the service account 11-25
+> (was 403). Pre-deploy dry runs: 14 of 15 recent form submitters and 12 of 12 recent event
+> registrants = noop (rules match the 11-25 backfill). Self-service page `/email-preferences` is the
+> AI Studio site, not this app. Spec: `docs/sprints/email-lists.md`.
+
+> **2026-11-25 (pm) — "National Accelerator" relabelled "Accelerators & Incubators"** (key
+> `incubators_accelerators__national_accelerator` kept; Zach: Newlab belongs with the accelerators).
+> Newlab moved there; legacy text `sub_category` updated on 17 records, all verified. "Innovation Hub"
+> now holds 0 records but is STILL an option: **measured 11-25, the API rejects dropping a picklist
+> option (PUT /custom-fields/{id} -> 400 "Cannot remove existing options during update")**, so option
+> removal is UI-only (Settings > Custom Fields > Profile > Resource Sub-categories). Append/relabel
+> through the API still works.
+
+> **2026-11-25 — 42 Michigan network resources LIVE; code still UNCOMMITTED.** Zach approved a researched
+> batch: 13 angel groups (6 Michigan Capital Network chapters incl. Capital Community Angels, which joined
+> Feb 2026; Ann Arbor Angels, Michigan Angel Fund, Northern Michigan Angels, BELLE, Birmingham, Pointe,
+> Ark), 12 IP/patent resources (USPTO Detroit office, Michigan Pro Bono Patent Project, Wayne State + MSU
+> Law clinics, Brooks Kushman, Harness IP, Young Basile, Howard & Howard, Price Heneveld, Fishman Stewart,
+> Bodman, Ward Law Office), 8 accelerators/programs (500 Global, Plug and Play, MassChallenge, Alchemist,
+> SOSV, Google for Startups NA, Newlab at Michigan Central, Detroit Startup Fund) and 9 associations
+> (MVCA, MMA, 360 Business Council = renamed MMSDC, GLWBC, NVBDC, MRLA, NFIB Michigan, MCWT, Michigan
+> Hispanic Chamber). New subs (read-back 43 options): Funding › Angel Investors, Business Services › IP &
+> Patents, Professional Association › Certification, Incubators & Accelerators › Innovation Hub.
+> Importer now takes `--data/--logos/--ledger/--folder` and per-record `collectives`; logos in
+> `reports/logos-mi-network/` (`build.py` renders tiles, `bg` override for white wordmarks). All 42 read
+> back ✓, re-run = 42 noop. MCN + both Endurance Law records re-tagged with the new subs.
+> Dropped for now (no working website): Michigan Black Business Alliance, Michigan Business Innovation
+> Association, Michigan Inventors Coalition. bluewaterangels.com serves unrelated real-estate logos, so
+> Bluewater uses the MCN logo.
+
+> **2026-11-24 — AI-credits resources LIVE + resource taxonomy expanded; code UNCOMMITTED.** Leland
+> forwarded Joe Gilby's `founder_resources_full.csv` (62 rows). "Software Discount" relabelled
+> **Software & Credits** (key `software_discount` kept) + 6 new subs (AI Model & API Credits, Business
+> Software, Cloud Credits, Dev Tools & Data, GPU & Compute, Perks Marketplace) + **Incubators &
+> Accelerators › National Accelerator**; `resource-categories-setup.ts` now RELABELS existing keys from
+> the taxonomy (read-back proved 7 / 39 options, nothing dropped). Tiers collapsed per vendor → **50
+> Profiles created + Claude for Startups updated** with hand-written short/bio, website, both
+> multi-selects, legacy text category/sub, collective lean_startup, 512px logo in Media Library
+> "Website / Resource Logos" (folder 6b05ad9d306ac23751d71f33; 49 logos, AI Grant none). 7 are
+> `hidden` (source says closed/paused/unverified). All 51 read back ✓, re-run = 51 noop.
+> Audit of the 95 pre-existing: 0 orphan keys, 0 sub-without-parent; 11 re-tags applied (NSF
+> Investment→Grants, EDOs get both Economic Development subs, Centrepolis + Hardware & Manufacturing,
+> MWF + Loans, MMTC + Manufacturing Resources, Lean Rocket CRM + Business Software, Fidelis https).
+> Files: `lib/profiles/resourceCategories.ts`, `scripts-ts/resource-categories-setup.ts`,
+> `scripts-ts/resources-ai-credits-import.ts`, `scripts-ts/resources-audit-fixes-2026-11-24.ts`,
+> `reports/resources-ai-credits-2026-11-24.json` + `-ledger.json`, `reports/logos-ai-credits/`.
+> ⚠️ `lib/enrichment/enrichers/profileIntake.ts` FALLBACK_CATEGORIES updated too. **Owed:** commit +
+> deploy; Zach re-points website filters at the new labels; Leland the kiosk; decide the 7 hidden;
+> Solomon Research & Analytics is a blank record (no status/category); Endurance Law exists twice;
+> 28 resources carry no Collective. Vitest could not run on the desktop VM (arm64 rollup) — run in the
+> cloud container before pushing (see profiles-resources-merge memory note).
+
 > **2026-11-04 — Profile intake built, NOT deployed.** New person/resource form submissions (Pending) get AI fill-in (fill-empty: category/sub/short description/bio/programs/collectives, website read for resources) + readiness tags + association checks before Aiden publishes. Spec: `docs/sprints/profile-intake.md`.
 
 > **This is the single source of truth for "where things stand right now."**

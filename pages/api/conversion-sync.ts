@@ -14,6 +14,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ackAndRun, wantsAsync } from '@/lib/webhooks/fastAck';
 import { extractConversionPayload, reportSiteConversion, type SiteConversionInput } from '@/lib/conversions/site';
+import { runFormListTrigger } from '@/lib/lists/triggers';
 
 function authorized(req: NextApiRequest): boolean {
   const expected = process.env.WIX_SYNC_WEBHOOK_SECRET;
@@ -65,7 +66,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const dryRun = req.query.dryRun === '1' || (req.body as any)?.dryRun === true;
   const full: SiteConversionInput = { ...(input as SiteConversionInput), contactId: input.contactId, type: input.type };
-  const work = () => reportSiteConversion(full, { dryRun });
+  // Marketing lists ride on the same webhook (docs/sprints/email-lists.md). The list trigger is
+  // fault-isolated and runs after the conversion send, so it can never delay or break it.
+  const work = async () => {
+    const conversion = await reportSiteConversion(full, { dryRun });
+    const lists = full.type === 'form_submitted' ? await runFormListTrigger({ contactId: full.contactId, formId: full.formId }, { dryRun }) : undefined;
+    return { ...conversion, ...(lists ? { lists } : {}) };
+  };
 
   if (wantsAsync(req)) {
     ackAndRun(res, work, { label: 'conversion-sync', detail: { type: input.type, contactId: input.contactId, via } });
