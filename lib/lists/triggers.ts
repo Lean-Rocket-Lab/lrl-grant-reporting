@@ -9,6 +9,7 @@ import { ghl, type GhlClient } from '../ghl/client';
 import { addContactToLists, type ListApplyResult } from './apply';
 import { formLists, opportunityLists, isNewOpportunity, eventTagLists, PROGRAM_AFFILIATION_FIELD, type FieldReader } from './rules';
 import { loadEventRows, findEventRow } from './eventMap';
+import { recentSubmissionFormIds } from './submissions';
 
 export interface ListTriggerResult {
   trigger: 'form' | 'event' | 'opportunity';
@@ -27,22 +28,29 @@ const fieldReader = (customFields: Array<{ id: string; value?: unknown }> | unde
 };
 
 /**
- * A form or survey was submitted. GHL's Form Submitted payload carries no form id, so (like the
- * conversion sender) the form comes from the contact's Latest Attribution: medium form|survey,
- * mediumId = form id. An explicit formId wins when the caller has one.
+ * A form or survey was submitted. GHL's Form Submitted payload carries no form id, and the contact's
+ * Latest Attribution is overwritten as soon as they book a meeting (the Intake flow does exactly
+ * that), so the candidates are: an explicit formId, the attributed form, AND the contact's own
+ * submissions from the last 2 hours (lib/lists/submissions.ts). Every candidate with a rule applies.
  */
-export async function runFormListTrigger(input: { contactId: string; formId?: string }, opts: TriggerOpts = {}): Promise<ListTriggerResult> {
+export async function runFormListTrigger(input: { contactId: string; formId?: string }, opts: TriggerOpts & { now?: Date } = {}): Promise<ListTriggerResult> {
   try {
     const client = opts.client ?? ghl();
     const contact: any = await getContact(input.contactId, client).catch(() => null);
     if (!contact) return { trigger: 'form', skipped: 'no-contact' };
     const attr = contact.lastAttribution ?? {};
-    const formId = input.formId || (/^(form|survey)$/i.test(String(attr.medium ?? '')) && attr.mediumId ? String(attr.mediumId) : undefined);
-    if (!formId) return { trigger: 'form', skipped: 'no-form-id' };
-    const d = formLists(formId, fieldReader(contact.customFields));
-    if (!d.rule) return { trigger: 'form', rule: null, skipped: `form ${formId} has no list rule` };
-    const outcome = await addContactToLists(input.contactId, d.lists, { source: 'form', detail: `form:${d.rule}`, dryRun: opts.dryRun, client, contact });
-    return { trigger: 'form', rule: d.rule, why: d.why, outcome };
+    const attributed = /^(form|survey)$/i.test(String(attr.medium ?? '')) && attr.mediumId ? String(attr.mediumId) : undefined;
+    const recent = await recentSubmissionFormIds(input.contactId, client, opts.now);
+    const candidates = Array.from(new Set([input.formId, attributed, ...recent].filter(Boolean) as string[]));
+    if (!candidates.length) return { trigger: 'form', skipped: 'no-form-id' };
+    const read = fieldReader(contact.customFields);
+    const decisions = candidates.map((id) => ({ id, ...formLists(id, read) })).filter((d) => d.rule);
+    if (!decisions.length) return { trigger: 'form', rule: null, skipped: `no list rule for ${candidates.join(', ')}` };
+    const lists = Array.from(new Set(decisions.flatMap((d) => d.lists)));
+    const rule = decisions.map((d) => d.rule).join('+');
+    const why = decisions.flatMap((d) => d.why);
+    const outcome = await addContactToLists(input.contactId, lists, { source: 'form', detail: `form:${rule}`, dryRun: opts.dryRun, client, contact });
+    return { trigger: 'form', rule, why, outcome };
   } catch (err: any) {
     console.error('[lists] form trigger failed', input.contactId, err?.message ?? err);
     return { trigger: 'form', error: String(err?.message ?? err) };

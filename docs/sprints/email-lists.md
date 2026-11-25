@@ -38,6 +38,8 @@ Rules live in `lib/lists/rules.ts` (form ids, field ids, pipeline ids, tag map i
 
 ## 4. Write contract
 
+- **Which form?** GHL's Form Submitted webhook has no form id, and the contact's Latest Attribution is overwritten the moment an Intake submitter books their meeting (every recent Intake submitter reads `medium: calendar`, measured 11-25). The form trigger therefore takes the attributed form PLUS the contact's own submissions from the last 2 hours (`GET /forms/submissions` and `/surveys/submissions` with `q=<contactId>`), and applies every one that has a rule.
+
 - Read the contact; write only missing lists; re-delivery = `noop`, zero writes.
 - `PUT /contacts/{id}` with `customFields: [{ id, value: ["Subscribed"] }]` (the app's contact rule; not the handoff's `field_value`).
 - Read back; a list not seen on read-back is `unverified` and the result is `error`, never `added`.
