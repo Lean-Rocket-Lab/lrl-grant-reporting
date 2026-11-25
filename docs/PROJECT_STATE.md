@@ -1,6 +1,6 @@
 # PROJECT STATE — LRL Operations Platform
 
-> **2026-11-25 (late) — Marketing list triggers: forms + events DEPLOYED.** New `lib/lists/` (fields,
+> **2026-11-25 (late) — Marketing list triggers: forms + events LIVE + VERIFIED (`8226c51`, fix `549369e`).** New `lib/lists/` (fields,
 > rules, eventMap, apply, triggers) puts contacts on the "List - X" checkbox fields from webhooks that
 > already arrive: every form/survey submission (`/api/conversion-sync`; form id from contact
 > `lastAttribution.mediumId`; Intake, SAMA application form + survey, LOCAL application, Join a
@@ -14,6 +14,12 @@
 > (was 403). Pre-deploy dry runs: 14 of 15 recent form submitters and 12 of 12 recent event
 > registrants = noop (rules match the 11-25 backfill). Self-service page `/email-preferences` is the
 > AI Studio site, not this app. Spec: `docs/sprints/email-lists.md`.
+> **Fix `549369e`:** Latest Attribution reads `calendar` for every Intake submitter (they book the
+> meeting right away), so the form trigger also reads the contact's own form + survey submissions from
+> the last 2 hours (`q=<contactId>`). **Verified on production 11-25:** event dry run (Old School
+> Tactics registrant) matched by id, noop; form dry run planned Lean Startup + ManuTech for today's
+> Intake; real write for that contact = added both, read-back OK, replay = noop, change_log rows
+> `lists:form` (applied + dry run). 33 tests.
 
 > **2026-11-25 (pm) — "National Accelerator" relabelled "Accelerators & Incubators"** (key
 > `incubators_accelerators__national_accelerator` kept; Zach: Newlab belongs with the accelerators).

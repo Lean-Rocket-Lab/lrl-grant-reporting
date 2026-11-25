@@ -1,6 +1,6 @@
 # Sprint: Marketing list triggers (ops app)
 
-- **Owner:** Zach Kraabel · **Written:** 2026-11-25 · **Status:** Forms + events deployed 2026-11-25; opportunity + coworking triggers built but OFF
+- **Owner:** Zach Kraabel · **Written:** 2026-11-25 · **Status:** Forms + events LIVE and verified 2026-11-25 (`8226c51`, `549369e`); opportunity + coworking triggers built but OFF
 - **Rules source of truth:** `claude/email-playbook.md` (LRL Marketing project). This doc is the build record.
 - **Code:** `lib/lists/` + three handler hooks. Tests: `lib/lists/__tests__/` (29).
 
